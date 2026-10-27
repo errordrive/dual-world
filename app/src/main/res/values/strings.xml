@@ -9,4 +9,8 @@
     <string name="clone_removed">Clone removed.</string>
     <string name="user_tag">Account #%1$d</string>
     <string name="search_hint">Search installed apps…</string>
+    <string name="action_rename">Rename Clone</string>
+    <string name="rename_dialog_title">Edit Account Label</string>
+    <string name="rename_dialog_hint">Enter custom name for this clone</string>
+    <string name="btn_save">Save Changes</string>
 </resources>
