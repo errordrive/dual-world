@@ -5,7 +5,12 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import com.example.dualworld.engine.cache.AppMetadataCache;
@@ -44,6 +49,29 @@ public class VirtualEngine {
         AGENT
     }
 
+    public enum LaunchResult {
+        SUCCESS,
+        ERROR_NOT_INSTALLED,
+        ERROR_APK_MISSING,
+        ERROR_NO_LAUNCHER,
+        ERROR_AGENT_UNAVAILABLE,
+        ERROR_EXCEPTION
+    }
+
+    public interface LaunchCallback {
+        void onResult(LaunchResult result);
+    }
+
+    private static int sLogLevel = Log.INFO;
+
+    public static void setLogLevel(int level) {
+        sLogLevel = level;
+    }
+
+    public static int getLogLevel() {
+        return sLogLevel;
+    }
+
     private Context mContext;
     private String mProcessName;
     private ProcessRole mProcessRole = ProcessRole.MAIN;
@@ -70,15 +98,7 @@ public class VirtualEngine {
             this.mContext = application;
             this.mProcessName = resolveProcessName(application);
             this.mProcessRole = detectProcessRole(mProcessName, application.getPackageName());
-
-            this.mFileSystem = new SandboxFileSystem(application);
-            this.mMetadataCache = AppMetadataCache.get(application);
-            this.mIconCache = IconCache.get(application);
-            this.mGuestPm = new GuestPackageManager(application);
-            this.mComponentResolver = new ComponentResolver(mGuestPm);
-            this.mPermissionMirror = new PermissionMirror(application);
-            this.mAgentProcessManager = AgentProcessManager.get();
-            this.mStubCoordinator = StubCoordinator.get();
+            this.mInitialized = true;
 
             Log.i(TAG, "VirtualEngine initialized for process: " + mProcessName + " (" + mProcessRole + ")");
 
@@ -87,7 +107,6 @@ public class VirtualEngine {
             } else if (mProcessRole == ProcessRole.SERVER) {
                 initServerProcess(application);
             }
-            mInitialized = true;
         } catch (Throwable t) {
             Log.e(TAG, "VirtualEngine initialization encountered non-fatal warning; operating in degraded mode", t);
         }
@@ -97,21 +116,7 @@ public class VirtualEngine {
         Log.i(TAG, "Configuring virtualization hooks in worker process...");
 
         try {
-            // 1. Install ActivityThread interceptor
-            ActivityThreadInterceptor.install(app);
-        } catch (Throwable t) {
-            Log.w(TAG, "ActivityThreadInterceptor setup note: " + t.getMessage());
-        }
-
-        try {
-            // 2. Install Instrumentation proxy
-            InstrumentationProxy.install(app);
-        } catch (Throwable t) {
-            Log.w(TAG, "InstrumentationProxy setup note: " + t.getMessage());
-        }
-
-        try {
-            // 3. Inject Binder Proxies for AMS & PMS
+            // Inject Binder Proxies for AMS & PMS
             BinderProxyManager.injectAll(
                     app,
                     (proxy, method, args, original) -> {
@@ -121,8 +126,8 @@ public class VirtualEngine {
                                 if (args[i] instanceof Intent) {
                                     Intent intent = (Intent) args[i];
                                     if (intent.getComponent() != null && !intent.getComponent().getPackageName().equals(mContext.getPackageName())) {
-                                        int agent = mAgentProcessManager.acquireAgent(intent.getComponent().getPackageName(), 0);
-                                        ComponentName stub = mStubCoordinator.allocateActivityStub(
+                                        int agent = getAgentProcessManager().acquireAgent(intent.getComponent().getPackageName(), 0);
+                                        ComponentName stub = getStubCoordinator().allocateActivityStub(
                                                 mContext.getPackageName(), agent,
                                                 intent.getComponent().getPackageName(), 0,
                                                 intent.getComponent().getClassName()
@@ -138,7 +143,8 @@ public class VirtualEngine {
                     (proxy, method, args, original) -> {
                         String name = method.getName();
                         if ("checkPermission".equals(name) && args != null && args.length >= 1) {
-                            return mPermissionMirror.checkPermission((String) args[0], null, 0);
+                            PermissionMirror pm = getPermissionMirror();
+                            return (pm != null) ? pm.checkPermission((String) args[0], null, 0) : 0;
                         }
                         return method.invoke(original, args);
                     }
@@ -183,34 +189,90 @@ public class VirtualEngine {
         }
     }
 
-    public boolean launchClone(Context context, String packageName, int userId) {
+    public void launchCloneAsync(Context ctx, String pkg, int userId, LaunchCallback cb) {
+        new Thread(() -> {
+            LaunchResult r = launchCloneInternal(ctx, pkg, userId);
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (cb != null) cb.onResult(r);
+            });
+        }, "dw-launch-" + pkg).start();
+    }
+
+    public LaunchResult launchClone(Context context, String packageName, int userId) {
+        return launchCloneInternal(context, packageName, userId);
+    }
+
+    public LaunchResult launchCloneInternal(Context context, String packageName, int userId) {
         try {
             AppMetadataCache cache = getMetadataCache();
             AppMetadataCache.AppEntry entry = (cache != null) ? cache.getApp(packageName, userId) : null;
-            if (entry == null) {
-                Log.e(TAG, "Cannot launch uninstalled clone: " + packageName);
-                return false;
-            }
 
             File baseApk = getFileSystem().getBaseApk(packageName);
+
+            // Check disk if cache misses before reporting uninstalled
+            if (entry == null) {
+                if (baseApk.exists()) {
+                    PackageManager pm = context.getPackageManager();
+                    PackageInfo pInfo = pm.getPackageArchiveInfo(baseApk.getAbsolutePath(), PackageManager.GET_ACTIVITIES | PackageManager.GET_PERMISSIONS);
+                    String appName = packageName;
+                    String versionName = "1.0";
+                    int versionCode = 1;
+                    if (pInfo != null) {
+                        if (pInfo.versionName != null) versionName = pInfo.versionName;
+                        versionCode = pInfo.versionCode;
+                        try {
+                            ApplicationInfo ai = pInfo.applicationInfo;
+                            ai.sourceDir = baseApk.getAbsolutePath();
+                            ai.publicSourceDir = baseApk.getAbsolutePath();
+                            appName = pm.getApplicationLabel(ai).toString();
+                        } catch (Exception ignored) {}
+                    }
+                    entry = new AppMetadataCache.AppEntry();
+                    entry.packageName = packageName;
+                    entry.userId = userId;
+                    entry.appName = appName;
+                    entry.apkPath = baseApk.getAbsolutePath();
+                    entry.apkHash = AppMetadataCache.calculateSha256(baseApk);
+                    entry.versionName = versionName;
+                    entry.versionCode = versionCode;
+                    entry.installedAt = System.currentTimeMillis();
+                    entry.lastLaunchAt = 0;
+                    entry.launchCount = 0;
+                    if (cache != null) {
+                        cache.putApp(entry);
+                    }
+                } else {
+                    Log.e(TAG, "Cannot launch uninstalled clone: " + packageName);
+                    return LaunchResult.ERROR_NOT_INSTALLED;
+                }
+            }
+
             if (!baseApk.exists()) {
                 Log.e(TAG, "Clone base.apk missing: " + baseApk.getAbsolutePath());
-                return false;
+                return LaunchResult.ERROR_APK_MISSING;
             }
 
             String mainActivityClass = getComponentResolver().resolveMainActivityClassName(baseApk.getAbsolutePath());
             if (mainActivityClass == null) {
                 Log.e(TAG, "No launcher activity discovered for " + packageName);
-                return false;
+                return LaunchResult.ERROR_NO_LAUNCHER;
             }
 
             // Acquire worker process & stub
             int agentIndex = getAgentProcessManager().acquireAgent(packageName, userId);
+            if (agentIndex < 0 || agentIndex >= AgentProcessManager.MAX_AGENTS) {
+                Log.e(TAG, "No agent process available for " + packageName);
+                return LaunchResult.ERROR_AGENT_UNAVAILABLE;
+            }
             String agentProcess = AgentProcessManager.getProcessNameForAgent(context.getPackageName(), agentIndex);
 
             ComponentName stubComponent = getStubCoordinator().allocateActivityStub(
                     context.getPackageName(), agentIndex, packageName, userId, mainActivityClass
             );
+            if (stubComponent == null) {
+                Log.e(TAG, "Could not allocate stub for " + packageName);
+                return LaunchResult.ERROR_AGENT_UNAVAILABLE;
+            }
 
             // Construct guest launch intent
             Intent guestIntent = new Intent(Intent.ACTION_MAIN);
@@ -218,21 +280,19 @@ public class VirtualEngine {
             guestIntent.setComponent(new ComponentName(packageName, mainActivityClass));
             guestIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-            // Wrap inside stub intent
-            Intent launchStubIntent = ParcelRewriter.wrapStubIntent(guestIntent, stubComponent, packageName, userId);
-            launchStubIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-            // Setup VM in router
-            VirtualMachine vm = new VirtualMachine(packageName, userId, agentIndex, agentProcess);
             File userSandboxDir = getFileSystem().getUserDataDir(packageName, userId);
-            File oatDir = getFileSystem().getOatDir(packageName);
-            File libDir = getFileSystem().getNativeLibDir(packageName, Build.SUPPORTED_ABIS != null && Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "arm64-v8a");
 
-            ClassLoaderInjector.DelegateClassLoader delegateLoader = ClassLoaderInjector.createDelegate(
-                    context, baseApk, oatDir, libDir, packageName
+            // Wrap inside stub intent with complete guest metadata
+            Intent launchStubIntent = ParcelRewriter.wrapStubIntent(
+                    guestIntent,
+                    stubComponent,
+                    packageName,
+                    userId,
+                    baseApk.getAbsolutePath(),
+                    userSandboxDir.getAbsolutePath(),
+                    mainActivityClass
             );
-            vm.create(baseApk, userSandboxDir, delegateLoader);
-            IpcRouter.get().registerVm(vm);
+            launchStubIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
             // Fire stub activity launch
             context.startActivity(launchStubIntent);
@@ -241,10 +301,10 @@ public class VirtualEngine {
             }
 
             Log.i(TAG, "Launched clone " + packageName + " (user " + userId + ") via " + stubComponent + " in " + agentProcess);
-            return true;
+            return LaunchResult.SUCCESS;
         } catch (Throwable t) {
             Log.e(TAG, "Failed to launch clone: " + packageName, t);
-            return false;
+            return LaunchResult.ERROR_EXCEPTION;
         }
     }
 
@@ -322,6 +382,13 @@ public class VirtualEngine {
             mComponentResolver = new ComponentResolver(getGuestPm());
         }
         return mComponentResolver;
+    }
+
+    public synchronized PermissionMirror getPermissionMirror() {
+        if (mPermissionMirror == null && mContext != null) {
+            mPermissionMirror = new PermissionMirror(mContext);
+        }
+        return mPermissionMirror;
     }
 
     public synchronized AgentProcessManager getAgentProcessManager() {

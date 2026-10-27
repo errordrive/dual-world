@@ -21,8 +21,14 @@ class CloneRepository(private val context: Context) {
         return engine.installClone(packageName, apkPath, userId)
     }
 
-    fun launchClone(packageName: String, userId: Int = 0): Boolean {
+    fun launchClone(packageName: String, userId: Int = 0): VirtualEngine.LaunchResult {
         return engine.launchClone(context, packageName, userId)
+    }
+
+    fun launchCloneAsync(packageName: String, userId: Int = 0, callback: (VirtualEngine.LaunchResult) -> Unit) {
+        engine.launchCloneAsync(context, packageName, userId) { result ->
+            callback(result)
+        }
     }
 
     fun uninstallClone(packageName: String, userId: Int = 0): Boolean {

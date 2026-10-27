@@ -15,12 +15,16 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.dualworld.R
 import com.example.dualworld.data.CloneRepository
 import com.example.dualworld.data.InstalledAppItem
 import com.example.dualworld.ui.components.GradientButton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -34,6 +38,7 @@ class AppListActivity : AppCompatActivity() {
     private val allApps = mutableListOf<InstalledAppItem>()
     private val filteredApps = mutableListOf<InstalledAppItem>()
     private val selectedPackages = mutableSetOf<String>()
+    private val animatedPositions = mutableSetOf<Int>()
 
     private lateinit var progressBar: ProgressBar
     private lateinit var recyclerView: RecyclerView
@@ -97,6 +102,7 @@ class AppListActivity : AppCompatActivity() {
     }
 
     private fun filterList(query: String) {
+        animatedPositions.clear()
         val trimmed = query.trim().lowercase(Locale.getDefault())
         filteredApps.clear()
 
@@ -129,18 +135,29 @@ class AppListActivity : AppCompatActivity() {
         val targets = allApps.filter { selectedPackages.contains(it.packageName) }
         if (targets.isEmpty()) return
 
-        progressBar.visibility = View.VISIBLE
-        bottomActionBar.visibility = View.GONE
+        lifecycleScope.launch {
+            progressBar.visibility = View.VISIBLE
+            bottomActionBar.visibility = View.GONE
 
-        executor.execute {
-            for (target in targets) {
-                repository.installClone(target.packageName, target.apkPath, 0)
+            val ok = withContext(Dispatchers.IO) {
+                var allSuccess = true
+                for (target in targets) {
+                    val success = repository.installClone(target.packageName, target.apkPath, 0)
+                    if (!success) {
+                        allSuccess = false
+                    }
+                }
+                allSuccess
             }
-            mainHandler.post {
-                progressBar.visibility = View.GONE
-                Toast.makeText(this, R.string.clone_success, Toast.LENGTH_SHORT).show()
+
+            progressBar.visibility = View.GONE
+            if (ok) {
+                Toast.makeText(this@AppListActivity, R.string.clone_success, Toast.LENGTH_SHORT).show()
                 setResult(RESULT_OK)
                 finish()
+            } else {
+                Toast.makeText(this@AppListActivity, "Failed to clone app", Toast.LENGTH_SHORT).show()
+                bottomActionBar.visibility = View.VISIBLE
             }
         }
     }
@@ -176,25 +193,34 @@ class AppListActivity : AppCompatActivity() {
                 holder.iconView.setImageResource(R.drawable.ic_launcher)
             }
 
-            // Staggered motion fade-in
-            holder.itemView.alpha = 0f
-            holder.itemView.translationY = 24f
-            holder.itemView.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(240)
-                .setStartDelay((position * 30L).coerceAtMost(300L))
-                .start()
+            // Staggered motion fade-in only for unseen items
+            if (!animatedPositions.contains(position)) {
+                animatedPositions.add(position)
+                holder.itemView.alpha = 0f
+                holder.itemView.translationY = 24f
+                holder.itemView.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(240)
+                    .setStartDelay((position * 40L).coerceAtMost(320L))
+                    .start()
+            } else {
+                holder.itemView.alpha = 1f
+                holder.itemView.translationY = 0f
+            }
 
             holder.itemView.setOnClickListener {
-                if (selectedPackages.contains(app.packageName)) {
-                    selectedPackages.remove(app.packageName)
-                    holder.checkBox.isChecked = false
-                } else {
-                    selectedPackages.add(app.packageName)
-                    holder.checkBox.isChecked = true
+                val pos = holder.bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION && pos < filteredApps.size) {
+                    val pkg = filteredApps[pos].packageName
+                    if (selectedPackages.contains(pkg)) {
+                        selectedPackages.remove(pkg)
+                    } else {
+                        selectedPackages.add(pkg)
+                    }
+                    notifyItemChanged(pos)
+                    updateBottomBar()
                 }
-                updateBottomBar()
             }
         }
 

@@ -1,6 +1,7 @@
 package com.example.dualworld.ui
 
 import android.app.AlertDialog
+import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -14,6 +15,7 @@ import com.example.dualworld.R
 import com.example.dualworld.data.CloneRepository
 import com.example.dualworld.engine.cache.AppMetadataCache
 import com.example.dualworld.engine.cache.IconCache
+import com.example.dualworld.engine.core.VirtualEngine
 import com.example.dualworld.ui.components.GradientButton
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import java.io.File
@@ -26,24 +28,33 @@ import java.util.Locale
  */
 class CloneDetailBottomSheet : BottomSheetDialogFragment() {
 
+    interface OnCloneChangedListener {
+        fun onCloneChanged()
+    }
+
     private lateinit var repository: CloneRepository
     private var packageName: String = ""
     private var userId: Int = 0
-    private var onDataChanged: (() -> Unit)? = null
+    private var onDataChanged: OnCloneChangedListener? = null
 
     companion object {
         private const val ARG_PKG = "arg_pkg"
         private const val ARG_USER = "arg_user"
 
-        fun newInstance(pkg: String, user: Int, onDataChanged: () -> Unit): CloneDetailBottomSheet {
+        fun newInstance(pkg: String, user: Int): CloneDetailBottomSheet {
             return CloneDetailBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_PKG, pkg)
                     putInt(ARG_USER, user)
                 }
-                this.onDataChanged = onDataChanged
             }
         }
+    }
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        onDataChanged = parentFragment as? OnCloneChangedListener
+            ?: activity as? OnCloneChangedListener
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -106,10 +117,23 @@ class CloneDetailBottomSheet : BottomSheetDialogFragment() {
 
         // Launch Action
         btnLaunch.setOnClickListener {
-            dismiss()
-            val success = repository.launchClone(packageName, userId)
-            if (!success) {
-                Toast.makeText(requireContext(), "Failed to launch clone sandbox", Toast.LENGTH_SHORT).show()
+            btnLaunch.isEnabled = false
+            btnLaunch.setText(getString(R.string.state_launching))
+            VirtualEngine.get().launchCloneAsync(
+                requireContext(), packageName, userId
+            ) { result ->
+                if (!isAdded) return@launchCloneAsync
+                btnLaunch.isEnabled = true
+                btnLaunch.setText(getString(R.string.action_launch))
+                if (result != VirtualEngine.LaunchResult.SUCCESS) {
+                    Toast.makeText(
+                        requireContext(),
+                        result.toUserMessage(),
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    dismiss()
+                }
             }
         }
 
@@ -129,7 +153,7 @@ class CloneDetailBottomSheet : BottomSheetDialogFragment() {
                     if (newName.isNotEmpty()) {
                         repository.renameClone(packageName, userId, newName)
                         nameView.text = newName
-                        onDataChanged?.invoke()
+                        onDataChanged?.onCloneChanged()
                     }
                 }
                 .setNegativeButton(R.string.btn_cancel, null)
@@ -144,7 +168,7 @@ class CloneDetailBottomSheet : BottomSheetDialogFragment() {
             fs.getUserDataDir(packageName, userId) // recreate skeleton
             storageVal.text = "0.1 MB"
             Toast.makeText(requireContext(), R.string.data_cleared, Toast.LENGTH_SHORT).show()
-            onDataChanged?.invoke()
+            onDataChanged?.onCloneChanged()
         }
 
         // Freeze Action
@@ -160,7 +184,7 @@ class CloneDetailBottomSheet : BottomSheetDialogFragment() {
                 .setPositiveButton(R.string.action_delete) { _, _ ->
                     repository.uninstallClone(packageName, userId)
                     Toast.makeText(requireContext(), R.string.clone_removed, Toast.LENGTH_SHORT).show()
-                    onDataChanged?.invoke()
+                    onDataChanged?.onCloneChanged()
                     dismiss()
                 }
                 .setNegativeButton(R.string.btn_cancel, null)
@@ -179,4 +203,13 @@ class CloneDetailBottomSheet : BottomSheetDialogFragment() {
         }
         return total
     }
+}
+
+fun VirtualEngine.LaunchResult.toUserMessage(): String = when (this) {
+    VirtualEngine.LaunchResult.SUCCESS -> "Clone launched successfully"
+    VirtualEngine.LaunchResult.ERROR_NOT_INSTALLED -> "Application is not installed in virtual sandbox"
+    VirtualEngine.LaunchResult.ERROR_APK_MISSING -> "Base APK missing from virtual storage"
+    VirtualEngine.LaunchResult.ERROR_NO_LAUNCHER -> "No launchable activity found in application"
+    VirtualEngine.LaunchResult.ERROR_AGENT_UNAVAILABLE -> "All virtual agent worker processes are busy"
+    VirtualEngine.LaunchResult.ERROR_EXCEPTION -> "Virtualization engine encountered an execution error"
 }

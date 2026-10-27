@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.Gravity
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -42,15 +43,26 @@ class GradientButton @JvmOverloads constructor(
 
         setOnTouchListener { v, event ->
             when (event.action) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(100).start()
+                MotionEvent.ACTION_DOWN ->
+                    v.animate().scaleX(0.96f).scaleY(0.96f)
+                        .setDuration(100).start()
+                MotionEvent.ACTION_UP -> {
+                    v.animate().scaleX(1f).scaleY(1f)
+                        .setDuration(120).start()
+                    v.performClick()
                 }
-                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
-                    v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
-                }
+                MotionEvent.ACTION_CANCEL ->
+                    v.animate().scaleX(1f).scaleY(1f)
+                        .setDuration(120).start()
             }
-            false
+            event.action == MotionEvent.ACTION_DOWN
+                || event.action == MotionEvent.ACTION_CANCEL
         }
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 
     fun setText(text: CharSequence) {

@@ -43,9 +43,47 @@ public class ComponentResolver {
 
     public String resolveMainActivityClassName(String apkPath) {
         PackageInfo pi = mGuestPm.getPackageInfo(apkPath, 0);
-        if (pi != null && pi.activities != null && pi.activities.length > 0) {
-            return pi.activities[0].name;
+        if (pi == null || pi.activities == null || pi.activities.length == 0) {
+            return null;
         }
-        return null;
+
+        String pkg = (pi.packageName != null) ? pi.packageName : "";
+        String[] keywords = {"main", "launch", "splash", "home", "start", "entry"};
+
+        // Pass 1: find an enabled activity whose simple name contains a launcher keyword
+        for (ActivityInfo info : pi.activities) {
+            if (info == null || !info.enabled) continue;
+            String name = normalizeActivityName(pkg, info.name);
+            String simpleName = getSimpleName(name).toLowerCase();
+            for (String kw : keywords) {
+                if (simpleName.contains(kw)) {
+                    return name;
+                }
+            }
+        }
+
+        // Pass 2: fall back to first enabled activity
+        for (ActivityInfo info : pi.activities) {
+            if (info != null && info.enabled) {
+                return normalizeActivityName(pkg, info.name);
+            }
+        }
+
+        // Fallback to first declared activity
+        return normalizeActivityName(pkg, pi.activities[0].name);
+    }
+
+    private String normalizeActivityName(String packageName, String name) {
+        if (name == null) return null;
+        if (name.startsWith(".")) {
+            return packageName + name;
+        }
+        return name;
+    }
+
+    private String getSimpleName(String className) {
+        if (className == null) return "";
+        int dot = className.lastIndexOf('.');
+        return (dot >= 0 && dot < className.length() - 1) ? className.substring(dot + 1) : className;
     }
 }

@@ -34,17 +34,19 @@ class StatusDot @JvmOverloads constructor(
     }
 
     fun setRunning(running: Boolean) {
+        animator?.cancel()
+        animator = null
         this.isRunningState = running
-        corePaint.color = if (running) Color.parseColor("#10B981") else Color.parseColor("#64748B")
-        pulsePaint.color = if (running) Color.parseColor("#10B981") else Color.TRANSPARENT
-
-        if (running) {
-            startPulseAnimation()
-        } else {
-            animator?.cancel()
-            pulseAlpha = 0
-            invalidate()
-        }
+        corePaint.color = if (running)
+            Color.parseColor("#10B981")
+        else Color.parseColor("#64748B")
+        pulsePaint.color = if (running)
+            Color.parseColor("#10B981")
+        else Color.TRANSPARENT
+        pulseRadius = 0f
+        pulseAlpha = 0
+        invalidate()  // flush stale frame immediately
+        if (running) startPulseAnimation()
     }
 
     private fun startPulseAnimation() {

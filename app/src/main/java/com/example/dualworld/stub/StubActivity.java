@@ -1,6 +1,7 @@
 package com.example.dualworld.stub;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
@@ -19,10 +20,20 @@ public class StubActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Intent intent = getIntent();
-        if (intent != null && intent.hasExtra(ParcelRewriter.EXTRA_TARGET_INTENT)) {
+        if (intent != null && intent.hasExtra(ParcelRewriter.EXTRA_GUEST_PKG)) {
             String guestPkg = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_PKG);
             int userId = intent.getIntExtra(ParcelRewriter.EXTRA_USER_ID, 0);
             Log.i(TAG, "StubActivity created for guest package: " + guestPkg + " (user " + userId + ")");
+
+            // The stub activity was reached directly; interception failed
+            new AlertDialog.Builder(this)
+                    .setTitle("Launch Failed")
+                    .setMessage("Could not start \"" + guestPkg
+                            + "\".\nThis device may restrict "
+                            + "app virtualization.")
+                    .setPositiveButton("OK", (d, w) -> finish())
+                    .setCancelable(false)
+                    .show();
         }
     }
 

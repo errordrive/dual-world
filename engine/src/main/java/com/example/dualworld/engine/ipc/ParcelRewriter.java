@@ -18,18 +18,31 @@ public class ParcelRewriter {
     public static final String EXTRA_GUEST_PKG = "_dw_guest_pkg_";
     public static final String EXTRA_USER_ID = "_dw_user_id_";
     public static final String EXTRA_STUB_CLASS = "_dw_stub_class_";
+    public static final String EXTRA_GUEST_APK_PATH = "_dw_guest_apk_path_";
+    public static final String EXTRA_GUEST_DATA_DIR = "_dw_guest_data_dir_";
+    public static final String EXTRA_GUEST_MAIN_CLASS = "_dw_guest_main_class_";
 
     public static Intent wrapStubIntent(Intent original, ComponentName stubComponent, String guestPkg, int userId) {
+        return wrapStubIntent(original, stubComponent, guestPkg, userId, null, null, null);
+    }
+
+    public static Intent wrapStubIntent(Intent original, ComponentName stubComponent, String guestPkg, int userId,
+                                        String guestApkPath, String guestDataDir, String guestMainClass) {
         Intent stubIntent = new Intent();
         stubIntent.setComponent(stubComponent);
-        if (original.getAction() != null) {
+        if (original != null && original.getAction() != null) {
             stubIntent.setAction(original.getAction());
         }
-        stubIntent.addFlags(original.getFlags());
-        stubIntent.putExtra(EXTRA_TARGET_INTENT, original);
+        if (original != null) {
+            stubIntent.addFlags(original.getFlags());
+            stubIntent.putExtra(EXTRA_TARGET_INTENT, original);
+        }
         stubIntent.putExtra(EXTRA_GUEST_PKG, guestPkg);
         stubIntent.putExtra(EXTRA_USER_ID, userId);
         stubIntent.putExtra(EXTRA_STUB_CLASS, stubComponent.getClassName());
+        if (guestApkPath != null) stubIntent.putExtra(EXTRA_GUEST_APK_PATH, guestApkPath);
+        if (guestDataDir != null) stubIntent.putExtra(EXTRA_GUEST_DATA_DIR, guestDataDir);
+        if (guestMainClass != null) stubIntent.putExtra(EXTRA_GUEST_MAIN_CLASS, guestMainClass);
         return stubIntent;
     }
 

@@ -64,14 +64,13 @@ public class ClassLoaderInjector {
         }
 
         String dexPath = guestApk.getAbsolutePath();
-        String optimizedDirectory = (oatDir != null && oatDir.exists()) ? oatDir.getAbsolutePath() : null;
         String librarySearchPath = (nativeLibDir != null && nativeLibDir.exists()) ? nativeLibDir.getAbsolutePath() : null;
 
         DexClassLoader guestLoader = null;
         try {
             guestLoader = new DexClassLoader(
                     dexPath,
-                    optimizedDirectory,
+                    null,
                     librarySearchPath,
                     hostClassLoader
             );

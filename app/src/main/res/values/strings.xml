@@ -23,6 +23,7 @@
 
     <!-- Actions & Detail Sheet -->
     <string name="action_launch">Launch App</string>
+    <string name="state_launching">Launching…</string>
     <string name="action_rename">Rename</string>
     <string name="action_clear_data">Clear Data</string>
     <string name="action_freeze">Freeze</string>

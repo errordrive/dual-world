@@ -8,6 +8,8 @@ import android.util.Log;
 
 import com.example.dualworld.core.VirtualCore;
 import com.example.dualworld.engine.core.VirtualEngine;
+import com.example.dualworld.engine.hook.ActivityThreadInterceptor;
+import com.example.dualworld.engine.hook.InstrumentationProxy;
 
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
@@ -36,13 +38,26 @@ public class DualWorldApplication extends Application {
         // 2. Install persistent uncaught exception handler
         installCrashHandler(base);
 
+        // 3. Early hook installation before BIND_APPLICATION
+        try {
+            ActivityThreadInterceptor.install(base);
+        } catch (Throwable t) {
+            Log.w(TAG, t);
+        }
+
+        try {
+            InstrumentationProxy.install(base);
+        } catch (Throwable t) {
+            Log.w(TAG, t);
+        }
+
         Log.i(TAG, "attachBaseContext() process=" + getProcessName());
 
-        // 3. Early bootstrap with try/catch guard
+        // 4. Early bootstrap with try/catch guard
         try {
             VirtualEngine.get().init(this);
         } catch (Throwable t) {
-            Log.e(TAG, "VirtualEngine early init warning", t);
+            Log.e(TAG, "engine", t);
         }
 
         try {

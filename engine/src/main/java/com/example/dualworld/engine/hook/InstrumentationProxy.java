@@ -12,6 +12,9 @@ import com.example.dualworld.engine.core.VirtualMachine;
 import com.example.dualworld.engine.ipc.IpcRouter;
 import com.example.dualworld.engine.ipc.ParcelRewriter;
 
+import dalvik.system.DexClassLoader;
+
+import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -65,10 +68,23 @@ public class InstrumentationProxy extends Instrumentation {
 
             if (guestIntent != null && guestIntent.getComponent() != null) {
                 String guestClassName = guestIntent.getComponent().getClassName();
+                Log.i(TAG, "newActivity swapping stub " + className + " -> guest " + guestClassName);
+
+                String apkPath = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_APK_PATH);
+                if (apkPath != null && new File(apkPath).exists()) {
+                    try {
+                        ClassLoader guest = new DexClassLoader(
+                                apkPath, null, null,
+                                cl != null ? cl : getClass().getClassLoader()
+                        );
+                        return mBase.newActivity(guest, guestClassName, guestIntent);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to load with direct guest DexClassLoader: " + e.getMessage());
+                    }
+                }
+
                 VirtualMachine vm = IpcRouter.get().route(guestPkg, userId);
                 ClassLoader targetLoader = (vm != null && vm.getClassLoader() != null) ? vm.getClassLoader() : cl;
-
-                Log.i(TAG, "newActivity swapping stub " + className + " -> guest " + guestClassName);
                 try {
                     return mBase.newActivity(targetLoader, guestClassName, guestIntent);
                 } catch (Exception e) {
