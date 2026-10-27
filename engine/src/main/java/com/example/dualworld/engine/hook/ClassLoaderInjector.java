@@ -57,17 +57,27 @@ public class ClassLoaderInjector {
     }
 
     public static DelegateClassLoader createDelegate(Context hostContext, File guestApk, File oatDir, File nativeLibDir, String guestPackage) {
-        String dexPath = guestApk.getAbsolutePath();
-        String optimizedDirectory = oatDir != null ? oatDir.getAbsolutePath() : null;
-        String librarySearchPath = nativeLibDir != null ? nativeLibDir.getAbsolutePath() : null;
-        ClassLoader hostClassLoader = hostContext.getClassLoader();
+        ClassLoader hostClassLoader = (hostContext != null) ? hostContext.getClassLoader() : ClassLoader.getSystemClassLoader();
+        if (guestApk == null || !guestApk.exists()) {
+            Log.e(TAG, "Cannot create DexClassLoader: guest APK file does not exist at " + (guestApk != null ? guestApk.getAbsolutePath() : "null"));
+            return new DelegateClassLoader(hostClassLoader, null, guestPackage);
+        }
 
-        DexClassLoader guestLoader = new DexClassLoader(
-                dexPath,
-                optimizedDirectory,
-                librarySearchPath,
-                hostClassLoader
-        );
+        String dexPath = guestApk.getAbsolutePath();
+        String optimizedDirectory = (oatDir != null && oatDir.exists()) ? oatDir.getAbsolutePath() : null;
+        String librarySearchPath = (nativeLibDir != null && nativeLibDir.exists()) ? nativeLibDir.getAbsolutePath() : null;
+
+        DexClassLoader guestLoader = null;
+        try {
+            guestLoader = new DexClassLoader(
+                    dexPath,
+                    optimizedDirectory,
+                    librarySearchPath,
+                    hostClassLoader
+            );
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to instantiate DexClassLoader for " + guestPackage, t);
+        }
 
         DelegateClassLoader delegate = new DelegateClassLoader(hostClassLoader, guestLoader, guestPackage);
         Log.i(TAG, "Created DelegateClassLoader for " + guestPackage + " dex=" + dexPath);

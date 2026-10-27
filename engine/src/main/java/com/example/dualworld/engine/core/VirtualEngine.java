@@ -26,11 +26,13 @@ import com.example.dualworld.engine.process.AgentProcessManager;
 import com.example.dualworld.engine.process.StubCoordinator;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * Central engine orchestrator uniting core virtualization, isolated file systems,
  * Binder IPC interception, component proxying, and caching.
+ * Fully guarded with null-safety and degraded mode resilience.
  */
 public class VirtualEngine {
     private static final String TAG = "VirtualEngine";
@@ -45,6 +47,7 @@ public class VirtualEngine {
     private Context mContext;
     private String mProcessName;
     private ProcessRole mProcessRole = ProcessRole.MAIN;
+    private boolean mInitialized = false;
 
     private SandboxFileSystem mFileSystem;
     private AppMetadataCache mMetadataCache;
@@ -61,70 +64,88 @@ public class VirtualEngine {
 
     private VirtualEngine() {}
 
-    public void init(Application application) {
-        this.mContext = application;
-        this.mProcessName = resolveProcessName(application);
-        this.mProcessRole = detectProcessRole(mProcessName, application.getPackageName());
+    public synchronized void init(Application application) {
+        if (mInitialized) return;
+        try {
+            this.mContext = application;
+            this.mProcessName = resolveProcessName(application);
+            this.mProcessRole = detectProcessRole(mProcessName, application.getPackageName());
 
-        this.mFileSystem = new SandboxFileSystem(application);
-        this.mMetadataCache = AppMetadataCache.get(application);
-        this.mIconCache = IconCache.get(application);
-        this.mGuestPm = new GuestPackageManager(application);
-        this.mComponentResolver = new ComponentResolver(mGuestPm);
-        this.mPermissionMirror = new PermissionMirror(application);
-        this.mAgentProcessManager = AgentProcessManager.get();
-        this.mStubCoordinator = StubCoordinator.get();
+            this.mFileSystem = new SandboxFileSystem(application);
+            this.mMetadataCache = AppMetadataCache.get(application);
+            this.mIconCache = IconCache.get(application);
+            this.mGuestPm = new GuestPackageManager(application);
+            this.mComponentResolver = new ComponentResolver(mGuestPm);
+            this.mPermissionMirror = new PermissionMirror(application);
+            this.mAgentProcessManager = AgentProcessManager.get();
+            this.mStubCoordinator = StubCoordinator.get();
 
-        Log.i(TAG, "VirtualEngine initialized for process: " + mProcessName + " (" + mProcessRole + ")");
+            Log.i(TAG, "VirtualEngine initialized for process: " + mProcessName + " (" + mProcessRole + ")");
 
-        if (mProcessRole == ProcessRole.AGENT) {
-            initAgentProcess(application);
-        } else if (mProcessRole == ProcessRole.SERVER) {
-            initServerProcess(application);
+            if (mProcessRole == ProcessRole.AGENT) {
+                initAgentProcess(application);
+            } else if (mProcessRole == ProcessRole.SERVER) {
+                initServerProcess(application);
+            }
+            mInitialized = true;
+        } catch (Throwable t) {
+            Log.e(TAG, "VirtualEngine initialization encountered non-fatal warning; operating in degraded mode", t);
         }
     }
 
     private void initAgentProcess(Application app) {
         Log.i(TAG, "Configuring virtualization hooks in worker process...");
 
-        // 1. Install ActivityThread interceptor
-        ActivityThreadInterceptor.install(app);
+        try {
+            // 1. Install ActivityThread interceptor
+            ActivityThreadInterceptor.install(app);
+        } catch (Throwable t) {
+            Log.w(TAG, "ActivityThreadInterceptor setup note: " + t.getMessage());
+        }
 
-        // 2. Install Instrumentation proxy
-        InstrumentationProxy.install(app);
+        try {
+            // 2. Install Instrumentation proxy
+            InstrumentationProxy.install(app);
+        } catch (Throwable t) {
+            Log.w(TAG, "InstrumentationProxy setup note: " + t.getMessage());
+        }
 
-        // 3. Inject Binder Proxies for AMS & PMS
-        BinderProxyManager.injectAll(
-                app,
-                (proxy, method, args, original) -> {
-                    String name = method.getName();
-                    if ("startActivity".equals(name)) {
-                        for (int i = 0; i < args.length; i++) {
-                            if (args[i] instanceof Intent) {
-                                Intent intent = (Intent) args[i];
-                                if (intent.getComponent() != null && !intent.getComponent().getPackageName().equals(mContext.getPackageName())) {
-                                    int agent = mAgentProcessManager.acquireAgent(intent.getComponent().getPackageName(), 0);
-                                    ComponentName stub = mStubCoordinator.allocateActivityStub(
-                                            mContext.getPackageName(), agent,
-                                            intent.getComponent().getPackageName(), 0,
-                                            intent.getComponent().getClassName()
-                                    );
-                                    args[i] = ParcelRewriter.wrapStubIntent(intent, stub, intent.getComponent().getPackageName(), 0);
-                                    Log.d(TAG, "Intercepted outbound startActivity -> wrapped with stub " + stub);
+        try {
+            // 3. Inject Binder Proxies for AMS & PMS
+            BinderProxyManager.injectAll(
+                    app,
+                    (proxy, method, args, original) -> {
+                        String name = method.getName();
+                        if ("startActivity".equals(name) && args != null) {
+                            for (int i = 0; i < args.length; i++) {
+                                if (args[i] instanceof Intent) {
+                                    Intent intent = (Intent) args[i];
+                                    if (intent.getComponent() != null && !intent.getComponent().getPackageName().equals(mContext.getPackageName())) {
+                                        int agent = mAgentProcessManager.acquireAgent(intent.getComponent().getPackageName(), 0);
+                                        ComponentName stub = mStubCoordinator.allocateActivityStub(
+                                                mContext.getPackageName(), agent,
+                                                intent.getComponent().getPackageName(), 0,
+                                                intent.getComponent().getClassName()
+                                        );
+                                        args[i] = ParcelRewriter.wrapStubIntent(intent, stub, intent.getComponent().getPackageName(), 0);
+                                        Log.d(TAG, "Intercepted outbound startActivity -> wrapped with stub " + stub);
+                                    }
                                 }
                             }
                         }
+                        return method.invoke(original, args);
+                    },
+                    (proxy, method, args, original) -> {
+                        String name = method.getName();
+                        if ("checkPermission".equals(name) && args != null && args.length >= 1) {
+                            return mPermissionMirror.checkPermission((String) args[0], null, 0);
+                        }
+                        return method.invoke(original, args);
                     }
-                    return method.invoke(original, args);
-                },
-                (proxy, method, args, original) -> {
-                    String name = method.getName();
-                    if ("checkPermission".equals(name) && args != null && args.length >= 1) {
-                        return mPermissionMirror.checkPermission((String) args[0], null, 0);
-                    }
-                    return method.invoke(original, args);
-                }
-        );
+            );
+        } catch (Throwable t) {
+            Log.w(TAG, "BinderProxyManager setup note: " + t.getMessage());
+        }
     }
 
     private void initServerProcess(Application app) {
@@ -146,40 +167,48 @@ public class VirtualEngine {
 
     private String resolveProcessName(Context context) {
         if (Build.VERSION.SDK_INT >= 28) {
-            return Application.getProcessName();
+            try {
+                return Application.getProcessName();
+            } catch (Throwable ignored) {}
         }
-        return context.getPackageName();
+        return context != null ? context.getPackageName() : "com.example.dualworld";
     }
 
     public boolean installClone(String packageName, String sourceApkPath, int userId) {
-        return ApkInstaller.installOrUpdate(mContext, mFileSystem, sourceApkPath, packageName, userId);
+        try {
+            return ApkInstaller.installOrUpdate(mContext, getFileSystem(), sourceApkPath, packageName, userId);
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to install clone: " + packageName, t);
+            return false;
+        }
     }
 
     public boolean launchClone(Context context, String packageName, int userId) {
         try {
-            AppMetadataCache.AppEntry entry = mMetadataCache.getApp(packageName, userId);
+            AppMetadataCache cache = getMetadataCache();
+            AppMetadataCache.AppEntry entry = (cache != null) ? cache.getApp(packageName, userId) : null;
             if (entry == null) {
                 Log.e(TAG, "Cannot launch uninstalled clone: " + packageName);
                 return false;
             }
 
-            File baseApk = mFileSystem.getBaseApk(packageName);
+            File baseApk = getFileSystem().getBaseApk(packageName);
             if (!baseApk.exists()) {
                 Log.e(TAG, "Clone base.apk missing: " + baseApk.getAbsolutePath());
                 return false;
             }
 
-            String mainActivityClass = mComponentResolver.resolveMainActivityClassName(baseApk.getAbsolutePath());
+            String mainActivityClass = getComponentResolver().resolveMainActivityClassName(baseApk.getAbsolutePath());
             if (mainActivityClass == null) {
                 Log.e(TAG, "No launcher activity discovered for " + packageName);
                 return false;
             }
 
             // Acquire worker process & stub
-            int agentIndex = mAgentProcessManager.acquireAgent(packageName, userId);
+            int agentIndex = getAgentProcessManager().acquireAgent(packageName, userId);
             String agentProcess = AgentProcessManager.getProcessNameForAgent(context.getPackageName(), agentIndex);
 
-            ComponentName stubComponent = mStubCoordinator.allocateActivityStub(
+            ComponentName stubComponent = getStubCoordinator().allocateActivityStub(
                     context.getPackageName(), agentIndex, packageName, userId, mainActivityClass
             );
 
@@ -195,9 +224,9 @@ public class VirtualEngine {
 
             // Setup VM in router
             VirtualMachine vm = new VirtualMachine(packageName, userId, agentIndex, agentProcess);
-            File userSandboxDir = mFileSystem.getUserDataDir(packageName, userId);
-            File oatDir = mFileSystem.getOatDir(packageName);
-            File libDir = mFileSystem.getNativeLibDir(packageName, Build.SUPPORTED_ABIS[0]);
+            File userSandboxDir = getFileSystem().getUserDataDir(packageName, userId);
+            File oatDir = getFileSystem().getOatDir(packageName);
+            File libDir = getFileSystem().getNativeLibDir(packageName, Build.SUPPORTED_ABIS != null && Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "arm64-v8a");
 
             ClassLoaderInjector.DelegateClassLoader delegateLoader = ClassLoaderInjector.createDelegate(
                     context, baseApk, oatDir, libDir, packageName
@@ -207,42 +236,105 @@ public class VirtualEngine {
 
             // Fire stub activity launch
             context.startActivity(launchStubIntent);
-            mMetadataCache.recordLaunch(packageName, userId);
+            if (cache != null) {
+                cache.recordLaunch(packageName, userId);
+            }
 
             Log.i(TAG, "Launched clone " + packageName + " (user " + userId + ") via " + stubComponent + " in " + agentProcess);
             return true;
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to launch clone: " + packageName, e);
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to launch clone: " + packageName, t);
             return false;
         }
     }
 
     public boolean uninstallClone(String packageName, int userId) {
-        mFileSystem.cleanUserSandbox(packageName, userId);
-        mMetadataCache.removeApp(packageName, userId);
-        mIconCache.evict(packageName, userId);
-        mAgentProcessManager.releaseAgent(packageName, userId);
-        IpcRouter.get().unregisterVm(packageName, userId);
-        return true;
+        try {
+            getFileSystem().cleanUserSandbox(packageName, userId);
+            AppMetadataCache cache = getMetadataCache();
+            if (cache != null) cache.removeApp(packageName, userId);
+            IconCache icons = getIconCache();
+            if (icons != null) icons.evict(packageName, userId);
+            getAgentProcessManager().releaseAgent(packageName, userId);
+            IpcRouter.get().unregisterVm(packageName, userId);
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "Error uninstalling clone", t);
+            return false;
+        }
     }
 
     public boolean renameClone(String packageName, int userId, String newName) {
-        mMetadataCache.updateLabel(packageName, userId, newName);
-        return true;
+        try {
+            AppMetadataCache cache = getMetadataCache();
+            if (cache != null) cache.updateLabel(packageName, userId, newName);
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "Error renaming clone", t);
+            return false;
+        }
     }
 
     public List<AppMetadataCache.AppEntry> getAllClones() {
-        return mMetadataCache.getAllApps();
+        try {
+            AppMetadataCache cache = getMetadataCache();
+            return (cache != null) ? cache.getAllApps() : Collections.emptyList();
+        } catch (Throwable t) {
+            Log.e(TAG, "Error fetching clones", t);
+            return Collections.emptyList();
+        }
     }
 
     public Context getContext() { return mContext; }
     public String getProcessName() { return mProcessName; }
     public ProcessRole getProcessRole() { return mProcessRole; }
-    public SandboxFileSystem getFileSystem() { return mFileSystem; }
-    public AppMetadataCache getMetadataCache() { return mMetadataCache; }
-    public IconCache getIconCache() { return mIconCache; }
-    public GuestPackageManager getGuestPm() { return mGuestPm; }
-    public ComponentResolver getComponentResolver() { return mComponentResolver; }
-    public AgentProcessManager getAgentProcessManager() { return mAgentProcessManager; }
-    public StubCoordinator getStubCoordinator() { return mStubCoordinator; }
+
+    public synchronized SandboxFileSystem getFileSystem() {
+        if (mFileSystem == null && mContext != null) {
+            mFileSystem = new SandboxFileSystem(mContext);
+        }
+        return mFileSystem;
+    }
+
+    public synchronized AppMetadataCache getMetadataCache() {
+        if (mMetadataCache == null && mContext != null) {
+            mMetadataCache = AppMetadataCache.get(mContext);
+        }
+        return mMetadataCache;
+    }
+
+    public synchronized IconCache getIconCache() {
+        if (mIconCache == null && mContext != null) {
+            mIconCache = IconCache.get(mContext);
+        }
+        return mIconCache;
+    }
+
+    public synchronized GuestPackageManager getGuestPm() {
+        if (mGuestPm == null && mContext != null) {
+            mGuestPm = new GuestPackageManager(mContext);
+        }
+        return mGuestPm;
+    }
+
+    public synchronized ComponentResolver getComponentResolver() {
+        if (mComponentResolver == null) {
+            mComponentResolver = new ComponentResolver(getGuestPm());
+        }
+        return mComponentResolver;
+    }
+
+    public synchronized AgentProcessManager getAgentProcessManager() {
+        if (mAgentProcessManager == null) {
+            mAgentProcessManager = AgentProcessManager.get();
+        }
+        return mAgentProcessManager;
+    }
+
+    public synchronized StubCoordinator getStubCoordinator() {
+        if (mStubCoordinator == null) {
+            mStubCoordinator = StubCoordinator.get();
+        }
+        return mStubCoordinator;
+    }
 }

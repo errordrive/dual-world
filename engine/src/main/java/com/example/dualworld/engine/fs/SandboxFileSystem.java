@@ -18,7 +18,21 @@ public class SandboxFileSystem {
     private final File mUsersRoot;
 
     public SandboxFileSystem(Context context) {
-        File dataDir = context.getDataDir();
+        File dataDir = null;
+        if (context != null) {
+            try {
+                dataDir = context.getDataDir();
+            } catch (Throwable ignored) {}
+            if (dataDir == null && context.getApplicationInfo() != null && context.getApplicationInfo().dataDir != null) {
+                dataDir = new File(context.getApplicationInfo().dataDir);
+            }
+            if (dataDir == null && context.getFilesDir() != null) {
+                dataDir = context.getFilesDir().getParentFile();
+            }
+        }
+        if (dataDir == null) {
+            dataDir = new File("/data/data/com.example.dualworld");
+        }
         this.mVirtualRoot = new File(dataDir, "virtual");
         this.mAppRoot = new File(mVirtualRoot, "app");
         this.mUsersRoot = new File(mVirtualRoot, "users");

@@ -17,8 +17,12 @@ public class VirtualServerProvider extends ContentProvider {
     @Override
     public boolean onCreate() {
         Log.i(TAG, "VirtualServerProvider initialized in :service daemon process");
-        VPackageManagerService.get().init(getContext());
-        VActivityManagerService.get().init(getContext());
+        try {
+            VPackageManagerService.get().init(getContext());
+            VActivityManagerService.get().init(getContext());
+        } catch (Throwable t) {
+            Log.w(TAG, "VirtualServerProvider service init warning: " + t.getMessage());
+        }
         return true;
     }
 

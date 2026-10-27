@@ -57,7 +57,9 @@ public class AppMetadataCache extends SQLiteOpenHelper {
         if (sInstance == null) {
             synchronized (AppMetadataCache.class) {
                 if (sInstance == null) {
-                    sInstance = new AppMetadataCache(context.getApplicationContext());
+                    Context safeContext = (context != null && context.getApplicationContext() != null)
+                            ? context.getApplicationContext() : context;
+                    sInstance = new AppMetadataCache(safeContext);
                 }
             }
         }

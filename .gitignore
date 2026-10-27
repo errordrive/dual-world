@@ -9,6 +9,7 @@
 .cxx
 *.apk
 *.aab
+*.zip
 *.keystore
 *.jks
 app/build/

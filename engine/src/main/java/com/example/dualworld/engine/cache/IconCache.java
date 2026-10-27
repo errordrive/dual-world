@@ -41,7 +41,9 @@ public class IconCache {
         if (sInstance == null) {
             synchronized (IconCache.class) {
                 if (sInstance == null) {
-                    sInstance = new IconCache(context.getApplicationContext());
+                    Context safeContext = (context != null && context.getApplicationContext() != null)
+                            ? context.getApplicationContext() : context;
+                    sInstance = new IconCache(safeContext);
                 }
             }
         }
@@ -50,7 +52,11 @@ public class IconCache {
 
     private IconCache(Context context) {
         mContext = context;
-        mDiskDir = new File(context.getCacheDir(), "virtual_icon_cache");
+        File cacheDir = (context != null) ? context.getCacheDir() : null;
+        if (cacheDir == null && context != null && context.getFilesDir() != null) {
+            cacheDir = new File(context.getFilesDir(), "cache");
+        }
+        mDiskDir = (cacheDir != null) ? new File(cacheDir, "virtual_icon_cache") : new File("/sdcard/virtual_icon_cache");
         if (!mDiskDir.exists()) {
             mDiskDir.mkdirs();
         }

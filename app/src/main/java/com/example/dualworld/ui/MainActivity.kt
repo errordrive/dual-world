@@ -106,21 +106,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshDashboard() {
-        clonesList.clear()
-        clonesList.addAll(repository.getAllClones())
+        try {
+            clonesList.clear()
+            clonesList.addAll(repository.getAllClones())
 
-        val count = clonesList.size
-        badgeCloneCount.text = getString(R.string.badge_clones_count, count)
+            val count = clonesList.size
+            badgeCloneCount.text = getString(R.string.badge_clones_count, count)
 
-        if (count == 0) {
-            contentContainer.visibility = View.GONE
-            emptyClonesState.visibility = View.VISIBLE
-        } else {
-            contentContainer.visibility = View.VISIBLE
-            emptyClonesState.visibility = View.GONE
+            if (count == 0) {
+                contentContainer.visibility = View.GONE
+                emptyClonesState.visibility = View.VISIBLE
+            } else {
+                contentContainer.visibility = View.VISIBLE
+                emptyClonesState.visibility = View.GONE
 
-            activeAdapter.notifyDataSetChanged()
-            allAdapter.notifyDataSetChanged()
+                activeAdapter.notifyDataSetChanged()
+                allAdapter.notifyDataSetChanged()
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e("MainActivity", "Dashboard refresh error", t)
         }
     }
 
