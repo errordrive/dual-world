@@ -134,3 +134,41 @@ Throughout all phases of this demonstration:
 ### 3. Platform Boundaries & Limitations
 - **SELinux Boundary:** Cloned applications execute strictly within the host UID's `untrusted_app` SELinux domain, preventing host escapes while ensuring isolated filesystem boundaries.
 - **Compatibility Matrix:** Supports Android 7.0 (API 24) through Android 14 (API 34) with specialized transaction handling on Android 9+ (API 28+).
+
+---
+
+## 7. VirtualEngine & UI Hardening Release (v2.1.0)
+
+Dual World v2.1.0 addresses all operational and edge-case defects identified across engine IPC boundaries, component resolution, threading, lifecycle state recreation, accessibility, and UI performance:
+
+### Engine Hardening (Bugs 1–10)
+1. **Cross-Process Intent State Bridge:** `ParcelRewriter` attaches `EXTRA_GUEST_APK_PATH`, `EXTRA_GUEST_DATA_DIR`, and `EXTRA_GUEST_MAIN_CLASS` to stub intents. `InstrumentationProxy.newActivity()` reconstructs guest `DexClassLoader` directly from intent extras in worker agent processes without depending on shared heap state.
+2. **API 26+ DexClassLoader Safety:** Removed illegal `oatDir` argument from `DexClassLoader` instantiations in `ClassLoaderInjector` and `VirtualEngine`, preventing runtime `IllegalArgumentException`.
+3. **Two-Pass Launcher Resolution:** Engineered a resilient two-pass heuristic in `ComponentResolver.resolveMainActivityClassName()` checking for `"main"`, `"launch"`, `"splash"`, `"home"`, `"start"`, and `"entry"` keywords before falling back to first enabled activity, with relative package name expansion.
+4. **Early Framework Hook Binding:** Shifted `ActivityThreadInterceptor.install()` and `InstrumentationProxy.install()` into `DualWorldApplication.attachBaseContext()` immediately after `HiddenApiBypass`, ensuring full interception before `BIND_APPLICATION` (message 110).
+5. **Asynchronous Non-Blocking Execution:** Re-engineered launch routines into `VirtualEngine.launchCloneAsync()`, dispatching sandbox preparation on background worker threads with main-thread callback delivery. Converted catalog batch operations in `AppListActivity` to Kotlin Coroutines via `lifecycleScope.launch(Dispatchers.IO)`.
+6. **Graceful Interception Fallback:** `StubActivity` detects un-intercepted fallback launches and presents an informative `AlertDialog` rather than rendering a blank white screen.
+7. **Lazy Engine Storage Initialization:** Removed premature initialization of `SandboxFileSystem`, `AppMetadataCache`, and `IconCache` during early `attachBaseContext()`, eliminating OEM early storage null-pointer exceptions.
+8. **Detailed Execution Results:** Introduced `VirtualEngine.LaunchResult` enum (`SUCCESS`, `ERROR_NOT_INSTALLED`, `ERROR_APK_MISSING`, `ERROR_NO_LAUNCHER`, `ERROR_AGENT_UNAVAILABLE`, `ERROR_EXCEPTION`), surfaced through `CloneRepository` and user-facing notifications.
+9. **Android 11+ All-Files Access:** Added `MANAGE_EXTERNAL_STORAGE` permission declaration and dynamic runtime permission intent prompts for API 30+ devices.
+10. **Cache Re-Hydration on Demand:** Added on-disk APK inspection fallback in `launchClone()` to re-hydrate the SQLite cache if disk binaries exist prior to cache warming.
+
+### UI & UX Polish (UI Bugs 1–11)
+1. **Segmented Carousel Filtering:** Split dashboard data into active and all-clones lists. The horizontal carousel strictly displays recently launched clones (`launchCount > 0` sorted by `lastLaunchAt`), hiding gracefully when empty.
+2. **Dynamic Process State Tracking:** Replaced mock position checks with a live `runningPackages` state set in `MainActivity`, dynamically toggling `StatusDot` and card badges upon launch success.
+3. **Async Icon Recycling Guards:** Tagged `ImageView` instances with their bound package name in `ActiveClonesAdapter` and `AllClonesAdapter`, eliminating recycled view icon flickering.
+4. **Single-Pass Stagger Animations:** Tracked `animatedPositions` to prevent scroll-triggered repeated fade-in flashes during RecyclerView scrolling.
+5. **Robust Catalog Selection:** Enforced clean state toggles with `notifyItemChanged()` and synchronized checkbox checks during filtering and scrolling in `AppListActivity`.
+6. **Async Launch Bottom Sheet:** Transformed `CloneDetailBottomSheet` launch button to invoke `launchCloneAsync` with a live `"Launching…"` loading indicator and granular error reporting.
+7. **Lifecycle-Resilient Result Callback:** Replaced lambda field references in `CloneDetailBottomSheet` with `OnCloneChangedListener` attached via fragment/activity context, surviving configuration changes and recreation.
+8. **Settings Preference Persistence:** Bound `SwitchMaterial` toggles to `SharedPreferences` (`dw_settings`), dynamically configuring engine logging levels (`VirtualEngine.setLogLevel`) for developer mode.
+9. **Animator Memory Leak Prevention:** Synchronously cancelled stale animators and flushed draw state in `StatusDot.setRunning()`.
+10. **Accessibility & Click Compliance:** Overrode `performClick()` and ensured standard touch events in `GradientButton`.
+11. **DiffUtil & Recycling Optimization:** Migrated dashboard RecyclerView adapters to `ListAdapter` with `DIFF_CALLBACK`, disabling costly full re-renders and change animations inside `NestedScrollView`.
+
+### Build Verification & Artifact
+- **Target Version:** VersionCode `4`, VersionName `"2.1.0"`
+- **Commit:** [`c3e5493`](https://github.com/errordrive/dual-world/commit/c3e5493)
+- **CI Build:** [GitHub Actions Run 40565636232](https://github.com/errordrive/dual-world/actions/runs/40565636232) (**SUCCESS**)
+- **APK Artifact:** `dualworld-v2.1.apk` (5.8 MB, SHA-256 `8b589a6be00061d00ab604dec7c0bdd7df634f0198c02cd1b74d2d8f36d823c5`)
+
