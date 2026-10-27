@@ -48,7 +48,11 @@ public class ParcelRewriter {
         if (info != null && sandboxedDataDir != null) {
             info.dataDir = sandboxedDataDir;
             info.deviceProtectedDataDir = sandboxedDataDir;
-            info.credentialProtectedDataDir = sandboxedDataDir;
+            try {
+                java.lang.reflect.Field field = ApplicationInfo.class.getDeclaredField("credentialProtectedDataDir");
+                field.setAccessible(true);
+                field.set(info, sandboxedDataDir);
+            } catch (Throwable ignored) {}
         }
     }
 

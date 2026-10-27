@@ -2,6 +2,7 @@
     <string name="app_name">Dual World</string>
     <string name="app_subtitle">Premium App Virtualization &amp; Multi-Account Engine</string>
     <string name="title_select_app">Clone Applications</string>
+    <string name="btn_add_app">Add Clone</string>
     <string name="header_greeting">Welcome back</string>
     <string name="device_nickname">Dual Space Virtual Pro</string>
     <string name="badge_clones_count">%1$d Clones Active</string>
