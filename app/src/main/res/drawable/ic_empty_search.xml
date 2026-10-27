@@ -1,0 +1,54 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+
+    <!-- Glowing Background Aura -->
+    <path
+        android:fillColor="#154F46E5"
+        android:pathData="M80,80m-56,0a56,56 0 1,0 112,0a56,56 0 1,0 -112,0"/>
+
+    <!-- Search Target Disc Grid -->
+    <path
+        android:strokeColor="#2A2A3E"
+        android:strokeWidth="1.5"
+        android:pathData="M40,80 L120,80 M80,40 L80,120"/>
+    <path
+        android:strokeColor="#3F3F56"
+        android:strokeWidth="1"
+        android:pathData="M80,80m-36,0a36,36 0 1,0 72,0a36,36 0 1,0 -72,0"/>
+
+    <!-- Floating Magnifying Scanner Lens -->
+    <path
+        android:fillColor="#242436"
+        android:strokeColor="#7C3AED"
+        android:strokeWidth="3.5"
+        android:pathData="M70,68m-26,0a26,26 0 1,0 52,0a26,26 0 1,0 -52,0"/>
+
+    <!-- Glass Reflection in Lens -->
+    <path
+        android:fillColor="#40818CF8"
+        android:pathData="M56,52 A18,18 0 0,1 84,68 L78,68 A12,12 0 0,0 56,58 Z"/>
+
+    <!-- Handle with Gradient Accents -->
+    <path
+        android:strokeColor="#4F46E5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M88,86 L118,116"/>
+    <path
+        android:strokeColor="#818CF8"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M98,96 L118,116"/>
+
+    <!-- Scan Line -->
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="2"
+        android:pathData="M50,68 L90,68"/>
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M90,68m-2,0a2,2 0 1,0 4,0a2,2 0 1,0 -4,0"/>
+</vector>

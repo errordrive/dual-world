@@ -40,9 +40,13 @@
             android:label="@string/title_select_app"
             android:parentActivityName=".ui.MainActivity" />
 
-        <!-- ======================================================== -->
-        <!-- Central Virtualization Service Daemon (:service)         -->
-        <!-- ======================================================== -->
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:label="@string/title_settings"
+            android:parentActivityName=".ui.MainActivity" />
+
+        <!-- Central Server Daemon (:service) -->
         <provider
             android:name=".server.VirtualServerProvider"
             android:authorities="com.example.dualworld.server.provider"
@@ -50,10 +54,31 @@
             android:exported="false" />
 
         <!-- ======================================================== -->
-        <!-- Stub Components for Agent Process :agent0                -->
+        <!-- Agent Process :agent0                                    -->
         <!-- ======================================================== -->
         <activity
-            android:name=".stub.StubActivity$P0"
+            android:name=".stub.StubActivity$P0A0"
+            android:process=":agent0"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P0A1"
+            android:process=":agent0"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P0A2"
+            android:process=":agent0"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P0A3"
             android:process=":agent0"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
             android:exported="false"
@@ -61,21 +86,42 @@
             android:windowSoftInputMode="adjustResize" />
 
         <service
-            android:name=".stub.StubService$P0"
+            android:name=".stub.StubService$PS0"
             android:process=":agent0"
             android:exported="false" />
 
         <provider
-            android:name=".stub.StubContentProvider$P0"
-            android:authorities="com.example.dualworld.stub.provider.p0"
+            android:name=".stub.StubContentProvider$CP0"
+            android:authorities="com.example.dualworld.stub.provider.cp0"
             android:process=":agent0"
             android:exported="false" />
 
         <!-- ======================================================== -->
-        <!-- Stub Components for Agent Process :agent1                -->
+        <!-- Agent Process :agent1                                    -->
         <!-- ======================================================== -->
         <activity
-            android:name=".stub.StubActivity$P1"
+            android:name=".stub.StubActivity$P1A0"
+            android:process=":agent1"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P1A1"
+            android:process=":agent1"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P1A2"
+            android:process=":agent1"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P1A3"
             android:process=":agent1"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
             android:exported="false"
@@ -83,21 +129,42 @@
             android:windowSoftInputMode="adjustResize" />
 
         <service
-            android:name=".stub.StubService$P1"
+            android:name=".stub.StubService$PS1"
             android:process=":agent1"
             android:exported="false" />
 
         <provider
-            android:name=".stub.StubContentProvider$P1"
-            android:authorities="com.example.dualworld.stub.provider.p1"
+            android:name=".stub.StubContentProvider$CP1"
+            android:authorities="com.example.dualworld.stub.provider.cp1"
             android:process=":agent1"
             android:exported="false" />
 
         <!-- ======================================================== -->
-        <!-- Stub Components for Agent Process :agent2                -->
+        <!-- Agent Process :agent2                                    -->
         <!-- ======================================================== -->
         <activity
-            android:name=".stub.StubActivity$P2"
+            android:name=".stub.StubActivity$P2A0"
+            android:process=":agent2"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P2A1"
+            android:process=":agent2"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P2A2"
+            android:process=":agent2"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P2A3"
             android:process=":agent2"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
             android:exported="false"
@@ -105,21 +172,36 @@
             android:windowSoftInputMode="adjustResize" />
 
         <service
-            android:name=".stub.StubService$P2"
-            android:process=":agent2"
-            android:exported="false" />
-
-        <provider
-            android:name=".stub.StubContentProvider$P2"
-            android:authorities="com.example.dualworld.stub.provider.p2"
+            android:name=".stub.StubService$PS2"
             android:process=":agent2"
             android:exported="false" />
 
         <!-- ======================================================== -->
-        <!-- Stub Components for Agent Process :agent3                -->
+        <!-- Agent Process :agent3                                    -->
         <!-- ======================================================== -->
         <activity
-            android:name=".stub.StubActivity$P3"
+            android:name=".stub.StubActivity$P3A0"
+            android:process=":agent3"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P3A1"
+            android:process=":agent3"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P3A2"
+            android:process=":agent3"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".stub.StubActivity$P3A3"
             android:process=":agent3"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize"
             android:exported="false"
@@ -127,14 +209,13 @@
             android:windowSoftInputMode="adjustResize" />
 
         <service
-            android:name=".stub.StubService$P3"
+            android:name=".stub.StubService$PS3"
             android:process=":agent3"
             android:exported="false" />
 
-        <provider
-            android:name=".stub.StubContentProvider$P3"
-            android:authorities="com.example.dualworld.stub.provider.p3"
-            android:process=":agent3"
+        <!-- Global Stub Receiver -->
+        <receiver
+            android:name=".stub.StubReceiver"
             android:exported="false" />
 
     </application>

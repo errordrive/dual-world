@@ -1,0 +1,48 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+
+    <!-- Hexagonal Virtual Core Chamber -->
+    <path
+        android:fillColor="#1516161F"
+        android:strokeColor="#3F3F56"
+        android:strokeWidth="1.5"
+        android:pathData="M80,25 L128,52 L128,108 L80,135 L32,108 L32,52 Z"/>
+
+    <!-- Central Processor Core -->
+    <path
+        android:fillColor="#20202C"
+        android:strokeColor="#7C3AED"
+        android:strokeWidth="2.5"
+        android:pathData="M60,60 h40 v40 h-40 Z"/>
+
+    <!-- Core Heart Glow -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M68,68 h24 v24 h-24 Z"/>
+    <path
+        android:fillColor="#818CF8"
+        android:pathData="M74,74 h12 v12 h-12 Z"/>
+
+    <!-- Circuit Trace Lines into Workers -->
+    <path
+        android:strokeColor="#818CF8"
+        android:strokeWidth="2"
+        android:pathData="M80,60 L80,38 M80,100 L80,122 M60,80 L38,80 M100,80 L122,80"/>
+
+    <!-- Worker Nodes -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M80,38m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0"/>
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M80,122m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0"/>
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M38,80m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0"/>
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M122,80m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0"/>
+</vector>

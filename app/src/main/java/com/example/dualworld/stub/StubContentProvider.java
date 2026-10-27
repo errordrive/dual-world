@@ -5,7 +5,11 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
 
+/**
+ * Pre-declared stub content provider placeholders for agent worker processes.
+ */
 public class StubContentProvider extends ContentProvider {
+
     @Override
     public boolean onCreate() {
         return true;
@@ -36,8 +40,12 @@ public class StubContentProvider extends ContentProvider {
         return 0;
     }
 
-    public static class P0 extends StubContentProvider {}
-    public static class P1 extends StubContentProvider {}
-    public static class P2 extends StubContentProvider {}
-    public static class P3 extends StubContentProvider {}
+    public static class CP0 extends StubContentProvider {}
+    public static class CP1 extends StubContentProvider {}
+
+    // Compatibility aliases
+    public static class P0 extends CP0 {}
+    public static class P1 extends CP1 {}
+    public static class P2 extends CP0 {}
+    public static class P3 extends CP1 {}
 }

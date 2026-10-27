@@ -1,0 +1,66 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+
+    <!-- Glowing Base Halo -->
+    <path
+        android:fillColor="#157C3AED"
+        android:pathData="M80,80m-64,0a64,64 0 1,0 128,0a64,64 0 1,0 -128,0"/>
+
+    <path
+        android:fillColor="#224F46E5"
+        android:pathData="M80,80m-48,0a48,48 0 1,0 96,0a48,48 0 1,0 -96,0"/>
+
+    <!-- Outer Dashboard Frame Hexagon -->
+    <path
+        android:strokeColor="#3F3F56"
+        android:strokeWidth="1.5"
+        android:pathData="M80,30 L125,55 L125,105 L80,130 L35,105 L35,55 Z"/>
+
+    <!-- Secondary Portal Layer (Cloned App Box 1 - Shadow) -->
+    <path
+        android:fillColor="#20202C"
+        android:pathData="M52,62 L82,46 L108,60 L78,76 Z"/>
+    <path
+        android:fillColor="#16161F"
+        android:pathData="M52,62 L78,76 L78,106 L52,92 Z"/>
+    <path
+        android:fillColor="#2A2A3E"
+        android:pathData="M78,76 L108,60 L108,90 L78,106 Z"/>
+
+    <!-- Primary Foreground Floating Cube (Virtual Clone #2 - Glowing) -->
+    <path
+        android:fillColor="#7C3AED"
+        android:pathData="M65,48 L95,32 L121,46 L91,62 Z"/>
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M65,48 L91,62 L91,92 L65,78 Z"/>
+    <path
+        android:fillColor="#6366F1"
+        android:pathData="M91,62 L121,46 L121,76 L91,92 Z"/>
+
+    <!-- Holographic Projection Beam -->
+    <path
+        android:strokeColor="#818CF8"
+        android:strokeWidth="2"
+        android:pathData="M93,47 L93,120"/>
+    <path
+        android:fillColor="#818CF8"
+        android:pathData="M93,47m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0"/>
+    <path
+        android:fillColor="#7C3AED"
+        android:pathData="M93,120m-3,0a3,3 0 1,0 6,0a3,3 0 1,0 -6,0"/>
+
+    <!-- Ambient Orbital Particle Dots -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M42,50m-2,0a2,2 0 1,0 4,0a2,2 0 1,0 -4,0"/>
+    <path
+        android:fillColor="#818CF8"
+        android:pathData="M118,112m-2,0a2,2 0 1,0 4,0a2,2 0 1,0 -4,0"/>
+    <path
+        android:fillColor="#7C3AED"
+        android:pathData="M38,98m-2,0a2,2 0 1,0 4,0a2,2 0 1,0 -4,0"/>
+</vector>

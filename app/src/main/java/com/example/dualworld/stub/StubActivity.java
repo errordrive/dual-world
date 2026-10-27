@@ -4,12 +4,13 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
-import android.widget.Toast;
 
-import com.example.dualworld.client.VirtualClient;
+import com.example.dualworld.engine.core.VirtualEngine;
+import com.example.dualworld.engine.ipc.ParcelRewriter;
 
 /**
- * Pre-declared stub activity multiplexer for Dual World.
+ * Pre-declared stub activity placeholders for worker agent processes (:agent0..:agent3).
+ * Intercepted at runtime by ActivityThreadInterceptor and InstrumentationProxy.
  */
 public class StubActivity extends Activity {
     private static final String TAG = "StubActivity";
@@ -18,32 +19,40 @@ public class StubActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Intent intent = getIntent();
-        if (intent == null) {
-            finish();
-            return;
+        if (intent != null && intent.hasExtra(ParcelRewriter.EXTRA_TARGET_INTENT)) {
+            String guestPkg = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_PKG);
+            int userId = intent.getIntExtra(ParcelRewriter.EXTRA_USER_ID, 0);
+            Log.i(TAG, "StubActivity created for guest package: " + guestPkg + " (user " + userId + ")");
         }
-
-        Intent targetIntent = intent.getParcelableExtra("_v_target_intent_");
-        String targetPkg = intent.getStringExtra("_v_pkg_");
-        int userId = intent.getIntExtra("_v_user_id_", 0);
-
-        Log.i(TAG, "StubActivity created: " + getClass().getSimpleName() + " target: " + targetPkg + " user: " + userId);
-
-        if (targetIntent != null && targetPkg != null) {
-            VirtualClient.get().setCurrentApp(targetPkg, userId);
-            try {
-                targetIntent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT);
-                startActivity(targetIntent);
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to launch target activity", e);
-                Toast.makeText(this, "Unable to launch cloned app: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        }
-        finish();
     }
 
-    public static class P0 extends StubActivity {}
-    public static class P1 extends StubActivity {}
-    public static class P2 extends StubActivity {}
-    public static class P3 extends StubActivity {}
+    // Agent 0 Stub Activities
+    public static class P0A0 extends StubActivity {}
+    public static class P0A1 extends StubActivity {}
+    public static class P0A2 extends StubActivity {}
+    public static class P0A3 extends StubActivity {}
+
+    // Agent 1 Stub Activities
+    public static class P1A0 extends StubActivity {}
+    public static class P1A1 extends StubActivity {}
+    public static class P1A2 extends StubActivity {}
+    public static class P1A3 extends StubActivity {}
+
+    // Agent 2 Stub Activities
+    public static class P2A0 extends StubActivity {}
+    public static class P2A1 extends StubActivity {}
+    public static class P2A2 extends StubActivity {}
+    public static class P2A3 extends StubActivity {}
+
+    // Agent 3 Stub Activities
+    public static class P3A0 extends StubActivity {}
+    public static class P3A1 extends StubActivity {}
+    public static class P3A2 extends StubActivity {}
+    public static class P3A3 extends StubActivity {}
+
+    // Legacy compatibility aliases
+    public static class P0 extends P0A0 {}
+    public static class P1 extends P1A0 {}
+    public static class P2 extends P2A0 {}
+    public static class P3 extends P3A0 {}
 }

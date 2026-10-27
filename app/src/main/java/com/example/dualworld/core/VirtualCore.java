@@ -132,6 +132,9 @@ public class VirtualCore {
             mStorage.getDataDir(packageName, userId);
             mStorage.getExternalDataDir(packageName, userId);
 
+            // Forward to new VirtualEngine
+            com.example.dualworld.engine.core.VirtualEngine.get().installClone(packageName, appInfo.sourceDir, userId);
+
             Log.i(TAG, "Cloned " + packageName + " for User #" + userId);
             return true;
         } catch (Exception e) {
@@ -153,6 +156,7 @@ public class VirtualCore {
             saveClonedAppsToStorage();
             File dataDir = mStorage.getDataDir(packageName, userId);
             deleteRecursive(dataDir);
+            com.example.dualworld.engine.core.VirtualEngine.get().uninstallClone(packageName, userId);
             return true;
         }
         return false;
@@ -170,6 +174,10 @@ public class VirtualCore {
     }
 
     public boolean launchApp(Context context, String packageName, int userId) {
+        boolean launched = com.example.dualworld.engine.core.VirtualEngine.get().launchClone(context, packageName, userId);
+        if (launched) {
+            return true;
+        }
         try {
             PackageManager pm = context.getPackageManager();
             Intent launchIntent = pm.getLaunchIntentForPackage(packageName);

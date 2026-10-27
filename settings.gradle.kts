@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CloneApp"
 include(":app")
+include(":engine")

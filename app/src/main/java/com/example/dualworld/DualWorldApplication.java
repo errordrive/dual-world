@@ -5,6 +5,7 @@ import android.content.Context;
 import android.util.Log;
 
 import com.example.dualworld.core.VirtualCore;
+import com.example.dualworld.engine.core.VirtualEngine;
 
 /**
  * Main Application class for Dual World.
@@ -17,6 +18,7 @@ public class DualWorldApplication extends Application {
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         Log.i(TAG, "attachBaseContext() process=" + getProcessName());
+        VirtualEngine.get().init(this);
         VirtualCore.get().attachBaseContext(this);
     }
 
@@ -24,6 +26,7 @@ public class DualWorldApplication extends Application {
     public void onCreate() {
         super.onCreate();
         Log.i(TAG, "onCreate() process=" + getProcessName());
+        VirtualEngine.get().init(this);
         VirtualCore.get().initialize(this);
     }
 }
