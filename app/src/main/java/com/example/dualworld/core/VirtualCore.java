@@ -174,7 +174,7 @@ public class VirtualCore {
     }
 
     public boolean launchApp(Context context, String packageName, int userId) {
-        boolean launched = com.example.dualworld.engine.core.VirtualEngine.get().launchClone(context, packageName, userId);
+        boolean launched = com.example.dualworld.engine.core.VirtualEngine.get().launchClone(context, packageName, userId) == com.example.dualworld.engine.core.VirtualEngine.LaunchResult.SUCCESS;
         if (launched) {
             return true;
         }
