@@ -1,6 +1,7 @@
 package com.example.dualworld.engine.pm;
 
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
@@ -30,9 +31,13 @@ public class ComponentResolver {
         // Implicit intent or launcher intent resolution
         PackageInfo pi = mGuestPm.getPackageInfo(apkPath, 0);
         if (pi != null && pi.activities != null && pi.activities.length > 0) {
-            if (Intent.ACTION_MAIN.equals(intent.getAction())) {
-                // Return first activity or launcher activity
-                return pi.activities[0];
+            String mainClass = resolveMainActivityClassName(apkPath);
+            if (mainClass != null) {
+                for (ActivityInfo info : pi.activities) {
+                    if (mainClass.equals(info.name)) {
+                        return info;
+                    }
+                }
             }
             return pi.activities[0];
         }
@@ -43,33 +48,93 @@ public class ComponentResolver {
 
     public String resolveMainActivityClassName(String apkPath) {
         PackageInfo pi = mGuestPm.getPackageInfo(apkPath, 0);
-        if (pi == null || pi.activities == null || pi.activities.length == 0) {
+        if (pi == null) {
             return null;
         }
 
         String pkg = (pi.packageName != null) ? pi.packageName : "";
-        String[] keywords = {"main", "launch", "splash", "home", "start", "entry"};
 
-        // Pass 1: find an enabled activity whose simple name contains a launcher keyword
+        // Strategy 1: Query system PackageManager for official user-facing launcher activity
+        Context context = mGuestPm.getContext();
+        if (context != null && !pkg.isEmpty()) {
+            try {
+                Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(pkg);
+                if (launchIntent != null && launchIntent.getComponent() != null) {
+                    String officialClass = launchIntent.getComponent().getClassName();
+                    Log.i(TAG, "Resolved official launcher activity via system for " + pkg + ": " + officialClass);
+                    return officialClass;
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "System package manager launch intent lookup failed for " + pkg + ": " + t.getMessage());
+            }
+        }
+
+        if (pi.activities == null || pi.activities.length == 0) {
+            return null;
+        }
+
+        // Strategy 2: Check for exact standard entry point names
+        String[] exactNames = {
+                "MainActivity", "HomeActivity", "LauncherActivity",
+                "StartActivity", "SplashActivity", "EntryActivity"
+        };
         for (ActivityInfo info : pi.activities) {
             if (info == null || !info.enabled) continue;
             String name = normalizeActivityName(pkg, info.name);
-            String simpleName = getSimpleName(name).toLowerCase();
-            for (String kw : keywords) {
-                if (simpleName.contains(kw)) {
+            String simpleName = getSimpleName(name);
+            for (String exact : exactNames) {
+                if (simpleName.equalsIgnoreCase(exact)) {
+                    Log.i(TAG, "Resolved launcher activity by exact name match: " + name);
                     return name;
                 }
             }
         }
 
-        // Pass 2: fall back to first enabled activity
+        // Strategy 3: Check launcher keywords while excluding non-phone targets (vr, wear, tv, auto)
+        String[] keywords = {"main", "launch", "splash", "home", "start", "entry"};
+        String[] nonPhoneExclusions = {"vr", "wear", "leanback", "tv", "auto", "watch", "car", "glass"};
+
         for (ActivityInfo info : pi.activities) {
-            if (info != null && info.enabled) {
-                return normalizeActivityName(pkg, info.name);
+            if (info == null || !info.enabled) continue;
+            String name = normalizeActivityName(pkg, info.name);
+            String simpleName = getSimpleName(name).toLowerCase();
+
+            boolean hasExclusion = false;
+            for (String ex : nonPhoneExclusions) {
+                if (simpleName.contains(ex)) {
+                    hasExclusion = true;
+                    break;
+                }
+            }
+            if (hasExclusion) continue;
+
+            for (String kw : keywords) {
+                if (simpleName.contains(kw)) {
+                    Log.i(TAG, "Resolved launcher activity by keyword match: " + name);
+                    return name;
+                }
             }
         }
 
-        // Fallback to first declared activity
+        // Strategy 4: Fall back to first enabled activity not containing non-phone exclusions
+        for (ActivityInfo info : pi.activities) {
+            if (info != null && info.enabled) {
+                String name = normalizeActivityName(pkg, info.name);
+                String simpleName = getSimpleName(name).toLowerCase();
+                boolean hasExclusion = false;
+                for (String ex : nonPhoneExclusions) {
+                    if (simpleName.contains(ex)) {
+                        hasExclusion = true;
+                        break;
+                    }
+                }
+                if (!hasExclusion) {
+                    return name;
+                }
+            }
+        }
+
+        // Strategy 5: Absolute fallback to first declared activity
         return normalizeActivityName(pkg, pi.activities[0].name);
     }
 

@@ -36,6 +36,14 @@ public class ParcelRewriter {
         if (original != null) {
             stubIntent.addFlags(original.getFlags());
             stubIntent.putExtra(EXTRA_TARGET_INTENT, original);
+
+            // Also mirror guest metadata inside original intent so unwrapped intents retain it
+            original.putExtra(EXTRA_GUEST_PKG, guestPkg);
+            original.putExtra(EXTRA_USER_ID, userId);
+            original.putExtra(EXTRA_STUB_CLASS, stubComponent.getClassName());
+            if (guestApkPath != null) original.putExtra(EXTRA_GUEST_APK_PATH, guestApkPath);
+            if (guestDataDir != null) original.putExtra(EXTRA_GUEST_DATA_DIR, guestDataDir);
+            if (guestMainClass != null) original.putExtra(EXTRA_GUEST_MAIN_CLASS, guestMainClass);
         }
         stubIntent.putExtra(EXTRA_GUEST_PKG, guestPkg);
         stubIntent.putExtra(EXTRA_USER_ID, userId);

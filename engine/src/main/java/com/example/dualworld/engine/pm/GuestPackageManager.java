@@ -26,7 +26,11 @@ public class GuestPackageManager {
     private final Map<String, PackageInfo> mPackageInfoCache = new HashMap<>();
 
     public GuestPackageManager(Context context) {
-        this.mContext = context.getApplicationContext();
+        this.mContext = context != null ? context.getApplicationContext() : null;
+    }
+
+    public Context getContext() {
+        return mContext;
     }
 
     public synchronized PackageInfo getPackageInfo(String apkPath, int flags) {

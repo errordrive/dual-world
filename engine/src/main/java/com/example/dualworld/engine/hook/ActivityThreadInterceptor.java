@@ -85,6 +85,9 @@ public class ActivityThreadInterceptor {
                 if (stubIntent != null && stubIntent.hasExtra(ParcelRewriter.EXTRA_TARGET_INTENT)) {
                     Intent guestIntent = stubIntent.getParcelableExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
                     if (guestIntent != null) {
+                        if (stubIntent.getExtras() != null) {
+                            guestIntent.putExtras(stubIntent.getExtras());
+                        }
                         intentField.set(record, guestIntent);
                         Log.i(TAG, "Legacy LAUNCH_ACTIVITY unwrapped: " + guestIntent.getComponent());
                     }
@@ -98,9 +101,18 @@ public class ActivityThreadInterceptor {
             if (transaction == null) return;
             try {
                 Class<?> transactionClass = transaction.getClass();
-                Method getCallbacksMethod = transactionClass.getDeclaredMethod("getCallbacks");
-                getCallbacksMethod.setAccessible(true);
-                List<?> callbacks = (List<?>) getCallbacksMethod.invoke(transaction);
+                List<?> callbacks = null;
+                try {
+                    Method getCallbacksMethod = transactionClass.getDeclaredMethod("getCallbacks");
+                    getCallbacksMethod.setAccessible(true);
+                    callbacks = (List<?>) getCallbacksMethod.invoke(transaction);
+                } catch (NoSuchMethodException e) {
+                    try {
+                        Method getItemsMethod = transactionClass.getDeclaredMethod("getTransactionItems");
+                        getItemsMethod.setAccessible(true);
+                        callbacks = (List<?>) getItemsMethod.invoke(transaction);
+                    } catch (Throwable ignored) {}
+                }
 
                 if (callbacks != null) {
                     for (Object item : callbacks) {
@@ -112,6 +124,9 @@ public class ActivityThreadInterceptor {
                             if (stubIntent != null && stubIntent.hasExtra(ParcelRewriter.EXTRA_TARGET_INTENT)) {
                                 Intent guestIntent = stubIntent.getParcelableExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
                                 if (guestIntent != null) {
+                                    if (stubIntent.getExtras() != null) {
+                                        guestIntent.putExtras(stubIntent.getExtras());
+                                    }
                                     mIntentField.set(item, guestIntent);
                                     Log.i(TAG, "EXECUTE_TRANSACTION LaunchActivityItem unwrapped: " + guestIntent.getComponent());
                                 }

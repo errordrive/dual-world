@@ -40,6 +40,31 @@ public class ApkInstaller {
             File libDir = fs.getNativeLibDir(packageName, primaryAbi);
             extractNativeLibs(targetApk, libDir, primaryAbi);
 
+            // Also copy and extract from split APKs if package is installed on host
+            try {
+                PackageManager pm = context.getPackageManager();
+                ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
+                if (appInfo != null && appInfo.splitSourceDirs != null) {
+                    for (String splitPath : appInfo.splitSourceDirs) {
+                        if (splitPath != null) {
+                            File splitFile = new File(splitPath);
+                            if (splitFile.exists()) {
+                                File destSplit = new File(fs.getAppDir(packageName), splitFile.getName());
+                                try {
+                                    copyFile(splitFile, destSplit);
+                                    extractNativeLibs(destSplit, libDir, primaryAbi);
+                                    Log.i(TAG, "Copied split APK to sandbox: " + destSplit.getName());
+                                } catch (Throwable t) {
+                                    Log.w(TAG, "Failed copying split APK: " + splitPath, t);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Host package split lookup note: " + t.getMessage());
+            }
+
             // Ensure user data directories exist
             fs.getUserDataDir(packageName, userId);
 
