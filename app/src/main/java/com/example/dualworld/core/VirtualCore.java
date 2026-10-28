@@ -55,11 +55,11 @@ public class VirtualCore {
 
         Log.i(TAG, "Initialized process: " + mProcessName + " (" + mProcessType + ")");
 
-        // Delegate to unified VirtualEngine
+        // Delegate to unified VirtualEngine via DynamicEngineLoader
         try {
-            com.example.dualworld.engine.core.VirtualEngine.get().init(app);
+            com.example.dualworld.engine.core.DynamicEngineLoader.init(app);
         } catch (Throwable t) {
-            Log.w(TAG, "VirtualEngine init from VirtualCore note: " + t.getMessage());
+            Log.w(TAG, "DynamicEngineLoader init from VirtualCore note: " + t.getMessage());
         }
     }
 

@@ -8,6 +8,7 @@
 .externalNativeBuild
 .cxx
 *.apk
+!app/src/main/assets/engine-core.apk
 *.aab
 *.zip
 *.keystore

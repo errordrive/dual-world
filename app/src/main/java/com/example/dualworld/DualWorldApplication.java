@@ -7,6 +7,7 @@ import android.os.Environment;
 import android.util.Log;
 
 import com.example.dualworld.core.VirtualCore;
+import com.example.dualworld.engine.core.DynamicEngineLoader;
 import com.example.dualworld.engine.core.VirtualEngine;
 import com.example.dualworld.engine.hook.ActivityThreadInterceptor;
 import com.example.dualworld.engine.hook.InstrumentationProxy;
@@ -38,7 +39,14 @@ public class DualWorldApplication extends Application {
         // 2. Install persistent uncaught exception handler
         installCrashHandler(base);
 
-        // 3. Early hook installation before BIND_APPLICATION
+        // 3. Dynamic core engine loading from assets/engine-core.apk
+        try {
+            DynamicEngineLoader.install(base);
+        } catch (Throwable t) {
+            Log.w(TAG, "DynamicEngineLoader install warning", t);
+        }
+
+        // 4. Early hook installation before BIND_APPLICATION
         try {
             ActivityThreadInterceptor.install(base);
         } catch (Throwable t) {
@@ -53,11 +61,11 @@ public class DualWorldApplication extends Application {
 
         Log.i(TAG, "attachBaseContext() process=" + getProcessName());
 
-        // 4. Early bootstrap with try/catch guard
+        // 5. Early bootstrap with dynamic engine or in-tree fallback
         try {
-            VirtualEngine.get().init(this);
+            DynamicEngineLoader.init(this);
         } catch (Throwable t) {
-            Log.e(TAG, "engine", t);
+            Log.e(TAG, "engine init error", t);
         }
 
         try {
@@ -73,9 +81,9 @@ public class DualWorldApplication extends Application {
         Log.i(TAG, "onCreate() process=" + getProcessName());
 
         try {
-            VirtualEngine.get().init(this);
+            DynamicEngineLoader.init(this);
         } catch (Throwable t) {
-            Log.e(TAG, "VirtualEngine onCreate init warning", t);
+            Log.e(TAG, "DynamicEngineLoader onCreate init warning", t);
         }
 
         try {
