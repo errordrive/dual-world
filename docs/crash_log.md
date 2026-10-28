@@ -171,3 +171,56 @@ java.lang.RuntimeException: Unable to instantiate activity ComponentInfo{com.goo
 3. **Composite Split-Aware `DexClassLoader`:** `InstrumentationProxy` constructs a composite `dexPath` containing `base.apk`, all sandboxed split APKs, and installed system splits. ClassLoaders are cached in `sGuestLoaders`.
 4. **Split APK Sandboxing:** `ApkInstaller` copies host split APKs and extracts native libraries for the primary ABI.
 5. **Crash-Proof Stub Fallback:** `InstrumentationProxy.newActivity()` wraps guest class instantiation in try/catch. If class resolution fails, it queries the system launcher or falls back to `StubActivity$P0A0` with a user-friendly notice, guaranteeing `:agent0` never crashes.
+
+
+---
+
+## 8. Launch Failed Dialog & Assist StackOverflow Triage (v2.1.2)
+
+### Dialog Reported
+```text
+"Launch Failed
+Could not start "com.facebook.katana". This device may restrict app virtualization.
+OK"
+"Launch Failed
+Could not start "com.google.android.youtube". This device may restrict app virtualization."
+```
+
+### Forensic Stack Trace Triaged
+From `/sdcard/dualworld_crash.txt`:
+```text
+FATAL CRASH: 2026-10-28 10:00:03.773
+Process: com.example.dualworld:agent2 (PID: 23919)
+Device: samsung SM-M536B (Android 16, SDK 36)
+========================================================
+java.lang.StackOverflowError: stack size 8188KB
+	at android.os.Parcel.writeValue(Parcel.java:2763)
+	at android.os.Parcel.writeArrayMapInternal(Parcel.java:1504)
+	at android.os.BaseBundle.writeToParcelInner(BaseBundle.java:1871)
+	at android.os.Bundle.writeToParcel(Bundle.java:1557)
+	at android.os.Parcel.writeBundle(Parcel.java:1573)
+	at android.content.Intent.writeToParcel(Intent.java:13403)
+	at android.app.assist.AssistContent.writeToParcelInternal(AssistContent.java:247)
+	at android.app.IActivityTaskManager$Stub$Proxy.reportAssistContextExtras(IActivityTaskManager.java:3981)
+	at android.app.ActivityThread.handleRequestAssistContextExtras(ActivityThread.java:5122)
+```
+
+### Root Cause
+1. **Circular Intent Parcel Self-Reference:**  
+   When unwrapping stub intents, `guestIntent.putExtras(stubIntent.getExtras())` copied `stubIntent.getExtras()` into `guestIntent`. Because `stubIntent` contained `EXTRA_TARGET_INTENT = guestIntent`, `guestIntent` wound up containing itself in its own extra bundle! When Android's framework attempted to report assist context extras (`IActivityTaskManager.reportAssistContextExtras`), the recursive parcel serialization exhausted the 8 MB call stack, crashing `:agent0` and `:agent2`.
+2. **Process Crash Fallback to Stub UI:**  
+   Following the process crash, the system restarted the activity task with the original stub intent, which invoked `StubActivity.onCreate()` directly and presented the "Launch Failed / This device may restrict app virtualization" alert dialog.
+3. **Android 15/16 Transaction Items Binding:**  
+   On Android 16 (SDK 36), `ClientTransaction` utilizes `mTransactionItems` directly instead of deprecated methods.
+4. **Missing Guest Resources & ClassLoader Bridge:**  
+   Guest activities need genuine package resources and theme inflation. Without guest context injection, `onCreate()` could not resolve layouts and styles.
+
+### Systematic Remediation (v2.1.2)
+1. **Self-Reference Elimination:**  
+   `ParcelRewriter.unwrapStubIntent()` and `ActivityThreadInterceptor` explicitly strip `EXTRA_TARGET_INTENT` from `guestIntent`, completely preventing recursive serialization.
+2. **Robust Android 15/16 Transaction Extraction:**  
+   `ActivityThreadInterceptor` inspects `mTransactionItems` via reflection, rewrites `mIntent`, and dynamically updates `mInfo.name` and `mInfo.packageName`.
+3. **Genuine System ClassLoader & Context Injection:**  
+   `InstrumentationProxy` leverages `mHostContext.createPackageContext(guestPkg, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY)` to obtain the exact, split-aware system ClassLoader and injects `guestContext.getResources()` into `ContextThemeWrapper.mResources`.
+4. **Persistent Real-Time Diagnostics:**  
+   `LaunchDiagnostics` streams all execution milestones directly to `/sdcard/dualworld_launch_diag.txt`.
