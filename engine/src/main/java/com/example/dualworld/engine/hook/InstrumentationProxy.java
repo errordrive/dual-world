@@ -10,7 +10,9 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.ContextThemeWrapper;
 
+import com.example.dualworld.engine.cache.LaunchDiagnostics;
 import com.example.dualworld.engine.core.VirtualMachine;
 import com.example.dualworld.engine.fs.SandboxFileSystem;
 import com.example.dualworld.engine.ipc.IpcRouter;
@@ -50,13 +52,13 @@ public class InstrumentationProxy extends Instrumentation {
             if (!(original instanceof InstrumentationProxy)) {
                 InstrumentationProxy proxy = new InstrumentationProxy(original, hostContext);
                 mInstrumentationField.set(activityThread, proxy);
-                Log.i(TAG, "InstrumentationProxy installed on ActivityThread");
+                LaunchDiagnostics.log(TAG, "InstrumentationProxy installed on ActivityThread");
                 return proxy;
             } else {
                 return (InstrumentationProxy) original;
             }
         } catch (Throwable t) {
-            Log.e(TAG, "Failed to install InstrumentationProxy", t);
+            LaunchDiagnostics.log(TAG, "Failed to install InstrumentationProxy: " + t);
             return null;
         }
     }
@@ -90,10 +92,11 @@ public class InstrumentationProxy extends Instrumentation {
                     targetIntent = target;
                     if (target.getComponent() != null) {
                         guestClassName = target.getComponent().getClassName();
+                        guestPkg = target.getComponent().getPackageName();
                     }
                 }
             }
-            if (intent.hasExtra(ParcelRewriter.EXTRA_GUEST_PKG)) {
+            if (guestPkg == null && intent.hasExtra(ParcelRewriter.EXTRA_GUEST_PKG)) {
                 guestPkg = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_PKG);
             }
             if (intent.hasExtra(ParcelRewriter.EXTRA_USER_ID)) {
@@ -105,10 +108,8 @@ public class InstrumentationProxy extends Instrumentation {
             if (intent.hasExtra(ParcelRewriter.EXTRA_GUEST_DATA_DIR)) {
                 guestDataDir = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_DATA_DIR);
             }
-            if (intent.hasExtra(ParcelRewriter.EXTRA_GUEST_MAIN_CLASS)) {
-                if (guestClassName == null) {
-                    guestClassName = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_MAIN_CLASS);
-                }
+            if (guestClassName == null && intent.hasExtra(ParcelRewriter.EXTRA_GUEST_MAIN_CLASS)) {
+                guestClassName = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_MAIN_CLASS);
             }
         }
 
@@ -129,17 +130,22 @@ public class InstrumentationProxy extends Instrumentation {
             }
         }
 
-        // If guest target identified, load via composite split-aware DexClassLoader
+        // Prevent circular reference on targetIntent
+        if (targetIntent != null) {
+            targetIntent.removeExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
+        }
+
+        // If guest target identified, load via composite split-aware DexClassLoader or genuine package context
         if (guestClassName != null && !guestClassName.startsWith("com.example.dualworld.")) {
+            LaunchDiagnostics.log(TAG, "newActivity resolving guest activity " + guestClassName + " for package " + guestPkg);
             ClassLoader guestLoader = getGuestClassLoader(guestPkg, guestApkPath, cl);
-            Log.i(TAG, "newActivity resolving guest activity " + guestClassName + " for " + guestPkg);
 
             try {
                 Activity act = mBase.newActivity(guestLoader, guestClassName, targetIntent);
-                Log.i(TAG, "Successfully instantiated guest activity: " + guestClassName);
+                LaunchDiagnostics.log(TAG, "Successfully instantiated guest activity: " + guestClassName);
                 return act;
-            } catch (ClassNotFoundException | NoClassDefFoundError cnfe) {
-                Log.w(TAG, "Class " + guestClassName + " not found on guest loader: " + cnfe.getMessage());
+            } catch (Throwable cnfe) {
+                LaunchDiagnostics.log(TAG, "Class " + guestClassName + " not instantiated on guest loader: " + cnfe.getMessage());
 
                 // Fallback 1: Query official launcher activity from system PackageManager
                 if (guestPkg != null && mHostContext != null) {
@@ -148,12 +154,14 @@ public class InstrumentationProxy extends Instrumentation {
                         if (launchIntent != null && launchIntent.getComponent() != null) {
                             String altClass = launchIntent.getComponent().getClassName();
                             if (!altClass.equals(guestClassName)) {
-                                Log.i(TAG, "Retrying with official system launcher class: " + altClass);
-                                return mBase.newActivity(guestLoader, altClass, launchIntent);
+                                LaunchDiagnostics.log(TAG, "Retrying with official system launcher class: " + altClass);
+                                Activity act = mBase.newActivity(guestLoader, altClass, launchIntent);
+                                LaunchDiagnostics.log(TAG, "Successfully instantiated fallback launcher: " + altClass);
+                                return act;
                             }
                         }
                     } catch (Throwable t) {
-                        Log.w(TAG, "Fallback launcher retry note: " + t.getMessage());
+                        LaunchDiagnostics.log(TAG, "Fallback launcher retry note: " + t.getMessage());
                     }
                 }
 
@@ -162,27 +170,22 @@ public class InstrumentationProxy extends Instrumentation {
                     VirtualMachine vm = IpcRouter.get().route(guestPkg, userId);
                     if (vm != null && vm.getClassLoader() != null && vm.getClassLoader() != guestLoader) {
                         try {
-                            return mBase.newActivity(vm.getClassLoader(), guestClassName, targetIntent);
+                            Activity act = mBase.newActivity(vm.getClassLoader(), guestClassName, targetIntent);
+                            LaunchDiagnostics.log(TAG, "Instantiated via VM classloader: " + guestClassName);
+                            return act;
                         } catch (Throwable ignored) {}
                     }
                 }
 
                 // Fallback 3: Return stub activity to display user-friendly notice rather than crashing
-                Log.e(TAG, "Cannot resolve guest activity " + guestClassName + "; falling back to stub UI", cnfe);
+                LaunchDiagnostics.log(TAG, "Cannot resolve guest activity " + guestClassName + "; falling back to stub UI (" + cnfe.getMessage() + ")");
                 try {
                     ClassLoader hostCl = (mHostContext != null) ? mHostContext.getClassLoader() : getClass().getClassLoader();
                     return mBase.newActivity(hostCl, "com.example.dualworld.stub.StubActivity$P0A0", intent != null ? intent : targetIntent);
                 } catch (Throwable t) {
-                    Log.e(TAG, "Failed stub UI fallback", t);
-                    throw cnfe;
+                    LaunchDiagnostics.log(TAG, "Failed stub UI fallback: " + t);
+                    throw new RuntimeException("Guest activity instantiation failed", cnfe);
                 }
-            } catch (Throwable t) {
-                Log.e(TAG, "Unexpected error instantiating guest activity " + guestClassName + ", falling back to stub UI", t);
-                try {
-                    ClassLoader hostCl = (mHostContext != null) ? mHostContext.getClassLoader() : getClass().getClassLoader();
-                    return mBase.newActivity(hostCl, "com.example.dualworld.stub.StubActivity$P0A0", intent != null ? intent : targetIntent);
-                } catch (Throwable ignored) {}
-                throw new RuntimeException("Guest activity instantiation failed: " + guestClassName, t);
             }
         }
 
@@ -198,6 +201,27 @@ public class InstrumentationProxy extends Instrumentation {
             }
         }
 
+        // Method A: Check if we can obtain genuine system ClassLoader via createPackageContext
+        if (guestPkg != null && !guestPkg.isEmpty() && mHostContext != null) {
+            try {
+                Context packageContext = mHostContext.createPackageContext(
+                        guestPkg,
+                        Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY
+                );
+                if (packageContext != null && packageContext.getClassLoader() != null) {
+                    ClassLoader pkgLoader = packageContext.getClassLoader();
+                    LaunchDiagnostics.log(TAG, "Using genuine package Context ClassLoader for " + guestPkg);
+                    if (cacheKey != null) {
+                        sGuestLoaders.put(cacheKey, pkgLoader);
+                    }
+                    return pkgLoader;
+                }
+            } catch (Throwable t) {
+                LaunchDiagnostics.log(TAG, "createPackageContext note for " + guestPkg + ": " + t.getMessage());
+            }
+        }
+
+        // Method B: Construct composite split-aware DexClassLoader
         StringBuilder dexPathBuilder = new StringBuilder();
         if (apkPath != null && new File(apkPath).exists()) {
             dexPathBuilder.append(apkPath);
@@ -260,7 +284,7 @@ public class InstrumentationProxy extends Instrumentation {
 
         String dexPath = dexPathBuilder.toString();
         if (dexPath.isEmpty()) {
-            Log.w(TAG, "No dex path found for guest " + guestPkg + ", fallback to base classloader");
+            LaunchDiagnostics.log(TAG, "No dex path found for guest " + guestPkg + ", fallback to base classloader");
             return baseCl != null ? baseCl : getClass().getClassLoader();
         }
 
@@ -268,14 +292,14 @@ public class InstrumentationProxy extends Instrumentation {
         String libPath = libPathBuilder.length() > 0 ? libPathBuilder.toString() : null;
 
         try {
-            Log.i(TAG, "Constructed DexClassLoader for " + guestPkg + "\n  dexPath=" + dexPath + "\n  libPath=" + libPath);
+            LaunchDiagnostics.log(TAG, "Constructed DexClassLoader for " + guestPkg + "\n  dexPath=" + dexPath + "\n  libPath=" + libPath);
             ClassLoader guestLoader = new DexClassLoader(dexPath, null, libPath, parent);
             if (cacheKey != null) {
                 sGuestLoaders.put(cacheKey, guestLoader);
             }
             return guestLoader;
         } catch (Throwable t) {
-            Log.e(TAG, "Failed to instantiate DexClassLoader for " + guestPkg, t);
+            LaunchDiagnostics.log(TAG, "Failed to instantiate DexClassLoader for " + guestPkg + ": " + t);
             return parent;
         }
     }
@@ -283,17 +307,60 @@ public class InstrumentationProxy extends Instrumentation {
     @Override
     public void callActivityOnCreate(Activity activity, Bundle icicle) {
         Intent intent = activity.getIntent();
-        if (intent != null && intent.hasExtra(ParcelRewriter.EXTRA_TARGET_INTENT)) {
-            String guestPkg = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_PKG);
-            int userId = intent.getIntExtra(ParcelRewriter.EXTRA_USER_ID, 0);
-            VirtualMachine vm = IpcRouter.get().route(guestPkg, userId);
+        String guestPkg = null;
+        int userId = 0;
 
+        if (intent != null) {
+            guestPkg = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_PKG);
+            userId = intent.getIntExtra(ParcelRewriter.EXTRA_USER_ID, 0);
+        }
+
+        if (guestPkg == null && activity.getComponentName() != null && !activity.getComponentName().getPackageName().equals(mHostContext != null ? mHostContext.getPackageName() : "com.example.dualworld")) {
+            guestPkg = activity.getComponentName().getPackageName();
+        }
+
+        if (guestPkg != null && mHostContext != null) {
+            try {
+                Context guestContext = mHostContext.createPackageContext(
+                        guestPkg,
+                        Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY
+                );
+
+                if (guestContext != null) {
+                    // Inject guest resources into ContextThemeWrapper
+                    try {
+                        Field resField = ContextThemeWrapper.class.getDeclaredField("mResources");
+                        resField.setAccessible(true);
+                        resField.set(activity, guestContext.getResources());
+                    } catch (Throwable ignored) {}
+
+                    try {
+                        Field themeField = ContextThemeWrapper.class.getDeclaredField("mTheme");
+                        themeField.setAccessible(true);
+                        themeField.set(activity, null);
+                    } catch (Throwable ignored) {}
+
+                    // Splice ClassLoader into LoadedApk
+                    ClassLoaderInjector.injectIntoLoadedApk(activity, guestContext.getClassLoader());
+                    LaunchDiagnostics.log(TAG, "Injected guest resources & classloader into " + activity.getClass().getName());
+                }
+            } catch (Throwable t) {
+                LaunchDiagnostics.log(TAG, "callActivityOnCreate guest context setup note for " + guestPkg + ": " + t.getMessage());
+            }
+
+            VirtualMachine vm = IpcRouter.get().route(guestPkg, userId);
             if (vm != null) {
-                Log.d(TAG, "callActivityOnCreate: Bound activity " + activity.getClass().getName() + " to VM " + guestPkg);
+                LaunchDiagnostics.log(TAG, "Bound activity " + activity.getClass().getName() + " to VM " + guestPkg);
             }
         }
 
-        mBase.callActivityOnCreate(activity, icicle);
+        try {
+            mBase.callActivityOnCreate(activity, icicle);
+            LaunchDiagnostics.log(TAG, "callActivityOnCreate completed for " + activity.getClass().getName());
+        } catch (Throwable t) {
+            LaunchDiagnostics.log(TAG, "callActivityOnCreate threw for " + activity.getClass().getName() + ": " + t);
+            throw t;
+        }
     }
 
     @Override

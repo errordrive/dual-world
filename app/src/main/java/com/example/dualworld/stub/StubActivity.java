@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 
+import com.example.dualworld.engine.cache.LaunchDiagnostics;
 import com.example.dualworld.engine.core.VirtualEngine;
 import com.example.dualworld.engine.ipc.ParcelRewriter;
 
@@ -24,6 +25,7 @@ public class StubActivity extends Activity {
             String guestPkg = intent.getStringExtra(ParcelRewriter.EXTRA_GUEST_PKG);
             int userId = intent.getIntExtra(ParcelRewriter.EXTRA_USER_ID, 0);
             Log.i(TAG, "StubActivity created for guest package: " + guestPkg + " (user " + userId + ")");
+            LaunchDiagnostics.log(TAG, "StubActivity reached for " + guestPkg + " user " + userId + " intent=" + intent);
 
             // The stub activity was reached directly; interception failed
             new AlertDialog.Builder(this)

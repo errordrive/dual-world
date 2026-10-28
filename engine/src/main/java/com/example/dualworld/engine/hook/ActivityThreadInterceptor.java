@@ -2,10 +2,13 @@ package com.example.dualworld.engine.hook;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 
+import com.example.dualworld.engine.cache.LaunchDiagnostics;
 import com.example.dualworld.engine.ipc.ParcelRewriter;
 
 import java.lang.reflect.Field;
@@ -39,9 +42,9 @@ public class ActivityThreadInterceptor {
             Handler.Callback originalCallback = (Handler.Callback) mCallbackField.get(mH);
 
             mCallbackField.set(mH, new HandlerCallbackWrapper(originalCallback, context));
-            Log.i(TAG, "ActivityThreadInterceptor successfully installed on mH");
+            LaunchDiagnostics.log(TAG, "ActivityThreadInterceptor successfully installed on mH");
         } catch (Throwable t) {
-            Log.e(TAG, "Failed to install ActivityThreadInterceptor", t);
+            LaunchDiagnostics.log(TAG, "Failed to install ActivityThreadInterceptor: " + t);
         }
     }
 
@@ -58,14 +61,16 @@ public class ActivityThreadInterceptor {
         public boolean handleMessage(Message msg) {
             try {
                 if (msg.what == LAUNCH_ACTIVITY) {
+                    LaunchDiagnostics.log(TAG, "Handling legacy LAUNCH_ACTIVITY (100)");
                     handleLegacyLaunchActivity(msg.obj);
                 } else if (msg.what == EXECUTE_TRANSACTION) {
+                    LaunchDiagnostics.log(TAG, "Handling EXECUTE_TRANSACTION (159)");
                     handleExecuteTransaction(msg.obj);
                 } else if (msg.what == BIND_APPLICATION) {
                     handleBindApplication(msg.obj);
                 }
             } catch (Throwable t) {
-                Log.e(TAG, "Error handling message " + msg.what, t);
+                LaunchDiagnostics.log(TAG, "Error handling message " + msg.what + ": " + t);
             }
 
             if (mOriginal != null) {
@@ -85,15 +90,26 @@ public class ActivityThreadInterceptor {
                 if (stubIntent != null && stubIntent.hasExtra(ParcelRewriter.EXTRA_TARGET_INTENT)) {
                     Intent guestIntent = stubIntent.getParcelableExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
                     if (guestIntent != null) {
-                        if (stubIntent.getExtras() != null) {
-                            guestIntent.putExtras(stubIntent.getExtras());
+                        // Prevent recursive parcel reference
+                        guestIntent.removeExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
+
+                        Bundle extras = stubIntent.getExtras();
+                        if (extras != null) {
+                            for (String key : extras.keySet()) {
+                                if (!ParcelRewriter.EXTRA_TARGET_INTENT.equals(key) && !guestIntent.hasExtra(key)) {
+                                    Object val = extras.get(key);
+                                    if (val instanceof String) guestIntent.putExtra(key, (String) val);
+                                    else if (val instanceof Integer) guestIntent.putExtra(key, (Integer) val);
+                                }
+                            }
                         }
+                        guestIntent.removeExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
                         intentField.set(record, guestIntent);
-                        Log.i(TAG, "Legacy LAUNCH_ACTIVITY unwrapped: " + guestIntent.getComponent());
+                        LaunchDiagnostics.log(TAG, "Legacy LAUNCH_ACTIVITY unwrapped: " + guestIntent.getComponent());
                     }
                 }
             } catch (Throwable t) {
-                Log.w(TAG, "Failed to rewrite legacy ActivityClientRecord", t);
+                LaunchDiagnostics.log(TAG, "Failed to rewrite legacy ActivityClientRecord: " + t);
             }
         }
 
@@ -102,16 +118,30 @@ public class ActivityThreadInterceptor {
             try {
                 Class<?> transactionClass = transaction.getClass();
                 List<?> callbacks = null;
+
+                // Android 15/16 field lookup
                 try {
-                    Method getCallbacksMethod = transactionClass.getDeclaredMethod("getCallbacks");
-                    getCallbacksMethod.setAccessible(true);
-                    callbacks = (List<?>) getCallbacksMethod.invoke(transaction);
-                } catch (NoSuchMethodException e) {
+                    Field f = transactionClass.getDeclaredField("mTransactionItems");
+                    f.setAccessible(true);
+                    callbacks = (List<?>) f.get(transaction);
+                } catch (Throwable t1) {
                     try {
-                        Method getItemsMethod = transactionClass.getDeclaredMethod("getTransactionItems");
-                        getItemsMethod.setAccessible(true);
-                        callbacks = (List<?>) getItemsMethod.invoke(transaction);
-                    } catch (Throwable ignored) {}
+                        Field f = transactionClass.getDeclaredField("mActivityCallbacks");
+                        f.setAccessible(true);
+                        callbacks = (List<?>) f.get(transaction);
+                    } catch (Throwable t2) {
+                        try {
+                            Method getItemsMethod = transactionClass.getMethod("getTransactionItems");
+                            getItemsMethod.setAccessible(true);
+                            callbacks = (List<?>) getItemsMethod.invoke(transaction);
+                        } catch (Throwable t3) {
+                            try {
+                                Method getCallbacksMethod = transactionClass.getMethod("getCallbacks");
+                                getCallbacksMethod.setAccessible(true);
+                                callbacks = (List<?>) getCallbacksMethod.invoke(transaction);
+                            } catch (Throwable ignored) {}
+                        }
+                    }
                 }
 
                 if (callbacks != null) {
@@ -124,23 +154,39 @@ public class ActivityThreadInterceptor {
                             if (stubIntent != null && stubIntent.hasExtra(ParcelRewriter.EXTRA_TARGET_INTENT)) {
                                 Intent guestIntent = stubIntent.getParcelableExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
                                 if (guestIntent != null) {
-                                    if (stubIntent.getExtras() != null) {
-                                        guestIntent.putExtras(stubIntent.getExtras());
-                                    }
+                                    // CRITICAL: Strip circular EXTRA_TARGET_INTENT reference to prevent 8MB StackOverflowError
+                                    guestIntent.removeExtra(ParcelRewriter.EXTRA_TARGET_INTENT);
+
                                     mIntentField.set(item, guestIntent);
-                                    Log.i(TAG, "EXECUTE_TRANSACTION LaunchActivityItem unwrapped: " + guestIntent.getComponent());
+
+                                    // Also update mInfo if present on LaunchActivityItem
+                                    try {
+                                        Field mInfoField = item.getClass().getDeclaredField("mInfo");
+                                        mInfoField.setAccessible(true);
+                                        ActivityInfo info = (ActivityInfo) mInfoField.get(item);
+                                        if (info != null && guestIntent.getComponent() != null) {
+                                            info.name = guestIntent.getComponent().getClassName();
+                                            info.packageName = guestIntent.getComponent().getPackageName();
+                                        }
+                                    } catch (Throwable tInfo) {
+                                        LaunchDiagnostics.log(TAG, "mInfo rewrite note: " + tInfo.getMessage());
+                                    }
+
+                                    LaunchDiagnostics.log(TAG, "EXECUTE_TRANSACTION LaunchActivityItem unwrapped: " + guestIntent.getComponent());
                                 }
                             }
                         }
                     }
+                } else {
+                    LaunchDiagnostics.log(TAG, "EXECUTE_TRANSACTION had null callbacks list");
                 }
             } catch (Throwable t) {
-                Log.w(TAG, "Failed to inspect ClientTransaction", t);
+                LaunchDiagnostics.log(TAG, "Failed to inspect ClientTransaction: " + t);
             }
         }
 
         private void handleBindApplication(Object appBindData) {
-            Log.d(TAG, "Intercepted BIND_APPLICATION");
+            LaunchDiagnostics.log(TAG, "Intercepted BIND_APPLICATION");
         }
     }
 }

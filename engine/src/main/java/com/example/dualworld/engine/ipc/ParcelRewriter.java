@@ -59,6 +59,7 @@ public class ParcelRewriter {
         if (stubIntent.hasExtra(EXTRA_TARGET_INTENT)) {
             Intent original = stubIntent.getParcelableExtra(EXTRA_TARGET_INTENT);
             if (original != null) {
+                original.removeExtra(EXTRA_TARGET_INTENT);
                 return original;
             }
         }
