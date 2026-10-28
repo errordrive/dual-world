@@ -55,8 +55,11 @@ public class VirtualCore {
 
         Log.i(TAG, "Initialized process: " + mProcessName + " (" + mProcessType + ")");
 
-        if (mProcessType == ProcessType.AGENT) {
-            VirtualClient.get().attachBaseContext(app);
+        // Delegate to unified VirtualEngine
+        try {
+            com.example.dualworld.engine.core.VirtualEngine.get().init(app);
+        } catch (Throwable t) {
+            Log.w(TAG, "VirtualEngine init from VirtualCore note: " + t.getMessage());
         }
     }
 

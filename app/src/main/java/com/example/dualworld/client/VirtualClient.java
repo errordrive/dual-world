@@ -23,9 +23,7 @@ public class VirtualClient {
         mContext = app;
         mAgentIndex = resolveAgentIndex(app);
         Log.i(TAG, "VirtualClient attachBaseContext for agent: " + mAgentIndex);
-
-        BinderHookManager.installHooks(app);
-        ActivityThreadHook.install(app);
+        // Note: Do not overwrite engine's ActivityThreadInterceptor with dummy hook
     }
 
     public void init(Application app) {
