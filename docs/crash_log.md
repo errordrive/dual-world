@@ -129,3 +129,45 @@ java.lang.NoSuchFieldException: No field mH in class Landroid/app/ActivityThread
 | **5. Clone Launch** | Tap launch button; host app remains stable | Stub activity multiplexer and `InstrumentationProxy` execute without host crash | **PASS** |
 | **6. Settings Screen** | Toggles and cache sizes render and interact smoothly | `SettingsActivity` switches toggle cleanly; "Clear Cache Now" executes asynchronously | **PASS** |
 | **7. Bottom Sheet Actions** | Full-peek bottom sheet opens with stats and actions | Storage, launches, last opened chips populate; inline rename and delete operate as expected | **PASS** |
+
+
+---
+
+## 7. Clone Launch Crash Investigation & Triage (v2.1.1)
+
+### Crash Log Details
+Captured directly on Samsung SM-M536B (Android 16, SDK 36):
+```text
+FATAL CRASH: 2026-10-28 09:08:42.258
+Process: com.example.dualworld:agent0 (PID: 15034)
+Thread: main (2)
+Device: samsung SM-M536B (Android 16, SDK 36)
+java.lang.RuntimeException: Unable to instantiate activity ComponentInfo{com.google.android.youtube/com.google.android.apps.youtube.app.vr.LaunchYouTubeVrActivity}: java.lang.ClassNotFoundException: Didn't find class "com.google.android.apps.youtube.app.vr.LaunchYouTubeVrActivity" on path: DexPathList[[zip file "/data/app/~~aPSbf4wwMllDt9bvav3ksw==/com.example.dualworld-U6kgqAt5XdlbCOFRI9Yyxg==/base.apk"],nativeLibraryDirectories=[/data/app/.../lib/arm64, /system/lib64, /system_ext/lib64]]
+	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:4223)
+	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:4414)
+	at android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:180)
+	at android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:157)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:103)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2796)
+	at android.os.Handler.dispatchMessage(Handler.java:112)
+	at android.os.Looper.loopOnce(Looper.java:232)
+	at android.os.Looper.loop(Looper.java:330)
+	at android.app.ActivityThread.main(ActivityThread.java:9400)
+```
+
+### Root Cause Analysis
+1. **Activity Resolution Failure (`ComponentResolver`):**
+   `resolveMainActivityClassName()` matched the first enabled activity containing the keyword `"launch"`. In YouTube, `LaunchYouTubeVrActivity` appeared earlier than standard entry points. This VR class only exists in optional VR feature splits, not in phone base dexes.
+2. **Missing Intent Extras on Transaction Unwrapping (`ActivityThreadInterceptor` & `ParcelRewriter`):**
+   On Android 15/16 (SDK 35/36), `LaunchActivityItem` replaced `mIntent` with `guestIntent`. However, `guestIntent` did not retain the unwrapping metadata (`EXTRA_GUEST_APK_PATH`, `EXTRA_TARGET_INTENT`), causing `InstrumentationProxy.newActivity()` to skip custom loader injection and fall back to the host `PathClassLoader`.
+3. **Split APK / Bundle Blindness:**
+   Modern Android applications utilize split APKs (`base.apk` + split config APKs + feature dexes). The guest ClassLoader was only pointing to `base.apk`, missing split dexes and ABI-specific `.so` files.
+4. **Unhandled Exception Crash:**
+   `InstrumentationProxy.newActivity()` did not catch `ClassNotFoundException` gracefully, allowing an unhandled exception to crash the `:agent0` worker process immediately.
+
+### Solutions Implemented (v2.1.1)
+1. **System Launch Intent Prioritization:** `ComponentResolver` queries `context.getPackageManager().getLaunchIntentForPackage(pkg)` first to identify the official user-facing activity (e.g. `WatchWhileActivity`), and filters out non-phone exclusions (`vr`, `wear`, `tv`, `auto`).
+2. **Intent Extra Propagation:** `ParcelRewriter.wrapStubIntent()` mirrors all metadata into the original `guestIntent`, and `ActivityThreadInterceptor` copies all extras across transaction rewrites.
+3. **Composite Split-Aware `DexClassLoader`:** `InstrumentationProxy` constructs a composite `dexPath` containing `base.apk`, all sandboxed split APKs, and installed system splits. ClassLoaders are cached in `sGuestLoaders`.
+4. **Split APK Sandboxing:** `ApkInstaller` copies host split APKs and extracts native libraries for the primary ABI.
+5. **Crash-Proof Stub Fallback:** `InstrumentationProxy.newActivity()` wraps guest class instantiation in try/catch. If class resolution fails, it queries the system launcher or falls back to `StubActivity$P0A0` with a user-friendly notice, guaranteeing `:agent0` never crashes.
